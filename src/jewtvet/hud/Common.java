@@ -41,6 +41,7 @@ public class Common implements ClientModInitializer {
          ResourcePackActivationType.NORMAL);
       System.out.println("[boathud] builtin ice pack registered=" + ok);
 
+
       CONFIG = AutoConfig.getConfigHolder(BoatHudConfig.class).getConfig();
       client = Minecraft.getInstance();
       hudRenderer = new HudRenderer(client);
