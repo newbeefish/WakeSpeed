@@ -75,7 +75,7 @@
 | Fabric API | 必需 |
 | Cloth Config API | 必需 |
 | ModMenu | 可选（仅用于在模组列表里显示） |
-| 推荐使用https://modrinth.com/resourcepack/r34-gtr材质包，非可选，同作者也有其它模型 |
+| 推荐使用https://modrinth.com/resourcepack/r34-gtr材质包，非可选，同作者也有其它模型 | （需安装 EMF + ETF），由 6GHz 制作，作者保留所有权利，请前往原页下载。 |
 ---
 
 ## 构建 / Building
