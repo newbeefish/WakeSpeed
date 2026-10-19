@@ -75,7 +75,7 @@
 | Fabric API | 必需 |
 | Cloth Config API | 必需 |
 | ModMenu | 可选（仅用于在模组列表里显示） |
-| 推荐使用https://modrinth.com/resourcepack/r34-gtr材质包，非可选，同作者也有其它模型 | （需安装 EMF + ETF），由 6GHz 制作，作者保留所有权利，请前往原页下载。 |
+
 ---
 
 ## 构建 / Building
@@ -118,3 +118,16 @@ javac -encoding UTF-8 -d out -cp %CP% src\**\*.java
 - **stephan** — 电机录音（公有领域）
 - **Tom Haigh** — 漂移胎叫（CC-BY 3.0）
 - **Trigger Rally** — 引擎录音（CC-BY 3.0）
+
+---
+
+## 内置资源包 / Bundled Resource Packs
+
+本模组内置两个资源包，均由**资源包系统**管理，可随时在「选项 → 资源包」中开启或关闭。
+
+| 资源包 | 默认状态 | 说明 |
+|---|---|---|
+| **F1 2021 Boat** | **开启** | 把木船换成 F1 赛车，含 6 支车队涂装。作者 6GHz，MIT 授权 |
+| **Ice as Concrete** | 关闭（可设自动） | 把冰/浮冰/蓝冰染成高对比纯色块 |
+
+> 装了第三方资源包（如 Skyline R34 GTR）会自动覆盖内置包，因为用户资源包优先级更高。
