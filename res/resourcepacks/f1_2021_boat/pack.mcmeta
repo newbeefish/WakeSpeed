@@ -1,9 +1,0 @@
-{
-  "pack": {
-    "description": "F1 2021 Boat by 6GHz (MIT) \u2014 bundled with WakeSpeed",
-    "pack_format": 46,
-    "supported_formats": { "min_inclusive": 4, "max_inclusive": 999 },
-    "min_format": 4,
-    "max_format": 999
-  }
-}
