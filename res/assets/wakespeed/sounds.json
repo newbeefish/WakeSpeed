@@ -1,0 +1,16 @@
+{
+  "motor": { "subtitle": "subtitles.boatengine.engine",
+    "sounds": [ { "name": "wakespeed:motor", "volume": 1.0, "pitch": 1.0, "stream": true } ] },
+  "engine_loop": { "subtitle": "subtitles.boatengine.engine",
+    "sounds": [ { "name": "wakespeed:engine_loop", "volume": 1.0, "pitch": 1.0, "stream": true } ] },
+  "turbo_whine": { "subtitle": "subtitles.boatengine.turbo",
+    "sounds": [ { "name": "wakespeed:turbo_whine", "volume": 1.0, "pitch": 1.0, "stream": true } ] },
+  "drift_skid": { "subtitle": "subtitles.boatengine.drift_skid",
+    "sounds": [ { "name": "wakespeed:drift_skid", "volume": 0.85, "pitch": 1.0 } ] },
+  "clutch": { "subtitle": "subtitles.boatengine.clutch",
+    "sounds": [ { "name": "wakespeed:clutch", "volume": 0.9, "pitch": 1.0 } ] },
+  "blowoff": { "subtitle": "subtitles.boatengine.blowoff",
+    "sounds": [ { "name": "wakespeed:blowoff", "volume": 0.9, "pitch": 1.0 } ] },
+  "gear_shift": { "subtitle": "subtitles.boatengine.gear_shift",
+    "sounds": [ { "name": "wakespeed:gear_shift", "volume": 0.9, "pitch": 1.0 } ] }
+}
