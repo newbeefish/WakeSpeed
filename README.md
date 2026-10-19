@@ -1,8 +1,8 @@
 # WakeSpeed 浪速
 
-> **把原版木船变成赛车：NFS 风格 HUD、燃油与电驱两套音效、专业赛车视角，一份模组全部搞定。**
+> **把原版木船变成赛车：赛车风格 HUD、燃油与电驱两套音效、专业赛车视角，一份模组全部搞定。**
 >
-> *Turn a vanilla boat into a race car: NFS-style HUD, gasoline & EV engine audio, and a proper racing camera — all in one mod.*
+> *Turn a vanilla boat into a race car: racing-style HUD, gasoline & EV engine audio, and a proper racing camera — all in one mod.*
 
 适用于 **Minecraft 26.1.2 / 26.2（Fabric）** · Fabric 26.1.2 / 26.2
 
