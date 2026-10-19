@@ -49,34 +49,3 @@ WakeSpeed 浪速 - 来源、授权与修改声明
 
   本模组整体: GPL-3.0
   第三方素材: 各自授权（公有领域 / CC-BY 3.0），已逐项署名
-  注意: GPL-3.0 要求分发时提供完整对应源码，并保留以上署名
-【资源包 / Resource Pack】
-
-  F1 2021 Boat（内置于本模组，默认开启）
-    作者: 6GHz
-    授权: MIT License
-    来源: https://modrinth.com/resourcepack/f1-2021-boat
-    说明: 原包内未附 LICENSE 文件，此处按 Modrinth 页面标注的 MIT 授权补充声明。
-          用户可在 选项 → 资源包 中随时关闭，或改用其他资源包覆盖。
-    修改: 仅重写了 pack.mcmeta 的 description 字段，其余文件未改动。
-
-    MIT License
-    Copyright (c) 6GHz
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in all
-    copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-    SOFTWARE.
