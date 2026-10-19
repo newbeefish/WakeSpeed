@@ -16,18 +16,18 @@ Minecraft 赛车船 HUD + 引擎/电机音效 + 赛车视角 | Racing-boat HUD, 
 
 **中文**
 ```
-把原版木船变成赛车：NFS 风格 HUD、燃油与电驱两套音效、专业赛车视角，一份模组全部搞定。
+把原版木船变成赛车：赛车风格 HUD、燃油与电驱两套音效、专业赛车视角，一份模组全部搞定。
 ```
 
 **English**
 ```
-Turn a vanilla boat into a race car: NFS-style HUD, gasoline & EV engine audio, and a proper racing camera — all in one mod.
+Turn a vanilla boat into a race car: racing-style HUD, gasoline & EV engine audio, and a proper racing camera — all in one mod.
 ```
 
 **双语合并版**
 ```
-把原版木船变成赛车：NFS 风格 HUD、燃油与电驱两套音效、专业赛车视角。
-Turn a vanilla boat into a race car: NFS-style HUD, gasoline & EV audio, racing camera.
+把原版木船变成赛车：赛车风格 HUD、燃油与电驱两套音效、专业赛车视角。
+Turn a vanilla boat into a race car: racing-style HUD, gasoline & EV audio, racing camera.
 ```
 
 ---
