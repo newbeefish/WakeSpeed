@@ -1,1 +1,22 @@
-{"subtitles.boatengine.engine":"Engine","subtitles.boatengine.turbo":"Turbo","subtitles.boatengine.drift_skid":"Tire skid","subtitles.boatengine.clutch":"Clutch","subtitles.boatengine.blowoff":"Blow-off valve","subtitles.boatengine.gear_shift":"Gear shift"}
+{
+    "subtitles.boatengine.engine":  "Engine",
+    "subtitles.boatengine.turbo":  "Turbo",
+    "subtitles.boatengine.drift_skid":  "Tire skid",
+    "subtitles.boatengine.clutch":  "Clutch",
+    "subtitles.boatengine.blowoff":  "Blow-off valve",
+    "subtitles.boatengine.gear_shift":  "Gear shift",
+    "key.category.wakespeed.keys":  "WakeSpeed",
+    "key.wakespeed.settings":  "Open Settings",
+    "key.wakespeed.toggle_style":  "Toggle Rally/Civilian",
+    "key.wakespeed.settings_alt":  "Open Settings (alt)",
+    "key.wakespeed.steer_right":  "Steer Right",
+    "key.wakespeed.throttle":  "Throttle",
+    "key.wakespeed.toggle_ev":  "Toggle Gas/Electric",
+    "key.wakespeed.shift_down":  "Shift Down",
+    "key.wakespeed.steer_left":  "Steer Left",
+    "key.wakespeed.clutch":  "Clutch",
+    "key.wakespeed.toggle_gearbox":  "Toggle Auto/Manual",
+    "key.wakespeed.brake":  "Brake",
+    "key.wakespeed.shift_up":  "Shift Up",
+    "key.categories.wakespeed.keys":  "WakeSpeed"
+}
