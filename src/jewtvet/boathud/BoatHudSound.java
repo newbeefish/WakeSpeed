@@ -78,6 +78,9 @@ public final class BoatHudSound {
    // ---------- 漂移 ----------
    private static final double DRIFT_MIN_SPEED = 0.20;
    private static final double DRIFT_MIN_ANGLE = 45.0;
+   /** 漂移退出的滞回角 + 宽限帧，避免在阈值附近抖动导致特效闪断 */
+   private static final double DRIFT_HOLD_ANGLE = 32.0;
+   private static final int DRIFT_GRACE_TICKS = 10;
    private static final int WHITE_SMOKE_AFTER_TICKS = 60;
    private static final int BURNOUT_TICKS = 20;
    private static final double BURNOUT_MIN_ANGLE = 60.0;
@@ -98,6 +101,7 @@ public final class BoatHudSound {
    private static int driftTicks = 0;
    private static int burnoutTicks = 0;
    private static int driftDir = 0;
+   private static int driftGrace = 0;
    private static int upshiftTicks = 0;
    private static double driftAnchorX = 0.0;
    private static double driftAnchorZ = 0.0;
@@ -144,11 +148,6 @@ public final class BoatHudSound {
       boolean movingBackward = sHeld && along < -0.02;
 
       toggleHotkeys(mc, cfg);
-
-      // ---------- 自定义驾驶 ----------
-      if (customDrive) {
-         applyCustomDrive(mc, boat, fwdX, fwdZ);
-      }
 
       // ---------- 手动挡换挡 ----------
       if (manual) {
@@ -292,8 +291,13 @@ public final class BoatHudSound {
          return;
       }
 
-      // 空挡：锁住进入时的车速，踩油门不加速
+      // 空挡：锁住进入时的车速，踩油门不加速；按 S 可以刹车
       if (gear == 0) {
+         if (sHeld) {
+            boat.setDeltaMovement(v.x * BRAKE_DAMP_MANUAL, v.y, v.z * BRAKE_DAMP_MANUAL);
+            neutralCap = Math.sqrt(v.x * v.x + v.z * v.z) * BRAKE_DAMP_MANUAL;
+            return;
+         }
          double mag = Math.sqrt(v.x * v.x + v.z * v.z);
          if (mag > neutralCap && mag > 1.0e-4) {
             double k = neutralCap / mag;
@@ -317,7 +321,7 @@ public final class BoatHudSound {
          return;
       }
 
-      // 发动机制动
+      // 发动机制动：松油门且不踩离合时自然减速
       if (!rawThrottle && !clutch && spd > 0.4) {
          double decel = ENGINE_BRAKE_BASE + (MAX_GEAR - gear) * ENGINE_BRAKE_PER_GEAR;
          if (along > 0.0) {
@@ -326,20 +330,19 @@ public final class BoatHudSound {
          }
       }
 
-      // 档位限速
       // 档位限速（电车无档位，统一按最高档速度）
-      double limit = cfgNow().ev_mode ? gearMax(MAX_GEAR) : gearMax(gear);
+      double limit = cfg.ev_mode ? gearMax(MAX_GEAR) : gearMax(gear);
       if (spd > limit) {
          Vec3 v2 = boat.getDeltaMovement();
          double scale = Math.max(0.82, 1.0 - (spd - limit) * 0.06);
          boat.setDeltaMovement(v2.x * scale, v2.y, v2.z * scale);
       }
 
-      // 档位扭矩：低档起步猛，高档起步无力；涡轮按比例给动力
+      // 档位扭矩：低档起步猛、高档无力；涡轮按比例给动力
       if (rawThrottle && !clutch) {
          double vNow = Math.sqrt(vel_mag(boat));
          double dv = vNow - prevV;
-         int effGear = cfg.ev_mode ? 1 : gear;                 // 电车按 1 档算扭矩
+         int effGear = cfg.ev_mode ? 1 : gear;
          double gearTorque = 1.0 / (1.0 + (effGear - 1) * 0.45);
          double rpmFactor = 0.20 + 0.80 * rpm;
          double pull = Math.min(1.0, gearTorque * rpmFactor * 1.6);
@@ -357,7 +360,6 @@ public final class BoatHudSound {
          prevV = Math.sqrt(vel_mag(boat));
       }
    }
-
    private static double vel_mag(AbstractBoat boat) {
       Vec3 v = boat.getDeltaMovement();
       return v.x * v.x + v.z * v.z;
@@ -371,7 +373,9 @@ public final class BoatHudSound {
       }
       Vec3 v = boat.getDeltaMovement();
       double along = v.x * fwdX + v.z * fwdZ;
-      if (along > 0.01) {
+      double mag = Math.sqrt(v.x * v.x + v.z * v.z);
+      // 只要不是已经在倒车就刹车；转向时 along 接近 0 也照样刹
+      if (along > -0.02 && mag > 0.02) {
          boat.setDeltaMovement(v.x * BRAKE_DAMP_AUTO, v.y, v.z * BRAKE_DAMP_AUTO);
       }
    }
@@ -458,8 +462,16 @@ public final class BoatHudSound {
                                  boolean clutch, double spd) {
       evMode = cfg.ev_mode;
 
-      // 电车没有变速箱：转速直接与车速成正比
+      // 电车没有变速箱：转速直接与车速成正比；空挡完全停转
       if (cfg.ev_mode) {
+         if (gear == 0) {
+            // N 档：电机与车轮断开，不转、不出声
+            rpm += (0.0F - rpm) * 0.45F;
+            if (rpm < 0.01F) {
+               rpm = 0.0F;
+            }
+            return;
+         }
          float target = (float)Math.min(1.0, spd / Math.max(1.0, gearMax(MAX_GEAR)));
          rpm += (target - rpm) * 0.28F;
          if (rpm < 0.0F) rpm = 0.0F;
@@ -531,27 +543,6 @@ public final class BoatHudSound {
          }
       }
       landSpeed = mag;
-   }
-
-   private static void applyCustomDrive(Minecraft mc, AbstractBoat boat, double fwdX, double fwdZ) {
-      boolean th = GearKeys.THROTTLE.isDown();
-      boolean br = GearKeys.BRAKE.isDown();
-      boolean left = GearKeys.STEER_LEFT.isDown();
-      boolean right = GearKeys.STEER_RIGHT.isDown();
-      Vec3 v = boat.getDeltaMovement();
-      double along = v.x * fwdX + v.z * fwdZ;
-      double steer = (left ? 1.0 : 0.0) - (right ? 1.0 : 0.0);
-      if (steer != 0.0) {
-         double gain = 0.55 + Math.min(1.0, Math.abs(along) / 0.30) * 2.0;
-         boat.setYRot(boat.getYRot() - (float)(steer * gain));
-      }
-      if (th && !br) {
-         double maxAlong = 0.62;
-         if (along < maxAlong) {
-            double add = Math.min(0.018, maxAlong - along);
-            boat.setDeltaMovement(v.x + fwdX * add, v.y, v.z + fwdZ * add);
-         }
-      }
    }
 
    // ================= 工具 =================
@@ -696,7 +687,22 @@ public final class BoatHudSound {
          hardBrake = false;
       }
 
-      if (angleDiff > DRIFT_MIN_ANGLE || hardBrake) {
+      // 进入用 45°，维持用 32°，并给 0.5 秒宽限，避免抖动导致闪断
+      boolean driftEnter = angleDiff > DRIFT_MIN_ANGLE || hardBrake;
+      boolean driftHold = angleDiff > DRIFT_HOLD_ANGLE || hardBrake;
+      if (driftActive) {
+         if (driftHold) {
+            driftGrace = 0;
+         } else if (++driftGrace > DRIFT_GRACE_TICKS) {
+            driftEnter = false;
+         } else {
+            driftEnter = true;
+         }
+      } else {
+         driftGrace = 0;
+      }
+
+      if (driftEnter) {
          driftActive = true;
          driftIntensity = (float)Math.min(1.0, Math.max((angleDiff - DRIFT_MIN_ANGLE) / 45.0, hardBrake ? 0.55 : 0.0));
          int dir = angleDiff > DRIFT_MIN_ANGLE ? (signedAngle > 0.0 ? 1 : -1) : driftDir;
