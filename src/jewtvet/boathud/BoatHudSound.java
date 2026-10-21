@@ -9,12 +9,12 @@ import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 燃油车音效控制：引擎 / 涡轮 / 泄压阀 / 离合 / 挂挡 / 漂移。
+ * 驾驶 / 音效核心。
  *
- * 引擎：转速状态机（rpm 0..1）。油门 -> 1.0；松手 -> 平滑落到怠速；倒档后退 -> 上限 0.5。
- * 涡轮：独立转速，1.5s 升到满，0.7s 降停。
- * 换挡：满转维持 0.6s 且速度到位 -> 升挡（离合+挂挡声，转速掉再回升）；速度掉出区间 -> 立即降挡。
- * 漂移：边沿触发；10x10 内同向满 1 秒判烧胎，产生黑颗粒与白烟。
+ * 自动挡：按速度自动升降挡，S 刹车，停住后继续按 S 倒车。
+ * 手动挡：R - N - 1..6，X 升档、Z 降档、C 离合；S 只刹车不倒车；挂 R 后按 W 倒车。
+ * 转速：自动挡跟油门；手动挡跟车速（rpm = 车速 / 当前档上限）。
+ * 涡轮：倒车也上压；转速越高上压越快；70% 起按比例给动力；满压触发泄压阀（民用）或抗迟滞（拉力）。
  */
 public final class BoatHudSound {
    public static float rpm = 0.0F;
@@ -22,14 +22,14 @@ public final class BoatHudSound {
    public static float turbo = 0.0F;
    public static boolean driftActive = false;
    public static float driftIntensity = 0.0F;
+   public static boolean brakeActive = false;
+   public static float brakeIntensity = 0.0F;
    public static int gear = 0;
-   /** 当前是否处于电车模式（供 HUD 判断是否做转速抖动） */
    public static boolean evMode = false;
 
+   // ---------- 转速 ----------
    private static final float RPM_UP = 0.030F;
-   /** 电车升转速率：电机扭矩瞬间输出，约 0.23 秒到满转（油车的 7 倍） */
    private static final float RPM_UP_EV = 0.220F;
-   /** 电车收电门回落速率：约 2 tick（0.1 秒）归零，只剩声音淡出做过渡 */
    private static final float RPM_DOWN_EV = 0.550F;
    private static final float RPM_DOWN = 0.10F;
    private static final float RPM_DOWN_REVERSE = 0.05F;
@@ -37,18 +37,45 @@ public final class BoatHudSound {
    private static final float IDLE_RPM = 0.10F;
    private static final float REV_MAX_RPM = 0.50F;
    private static final float ENGINE_FADE_OUT = 0.12F;
-   private static final float BLOWOFF_MIN_RPM = 5000.0F / 8000.0F;
 
+   // ---------- 涡轮 ----------
    private static final float TURBO_UP = 0.0333F;
    private static final float TURBO_DOWN = 0.0714F;
    private static final float TURBO_STOP = 0.01F;
+   private static final float BLOWOFF_MIN_TURBO = 0.98F;
+   private static final float TURBO_POWER_FROM = 0.70F;
+   private static final double TURBO_POWER_GAIN = 1.10;
+   private static final float TURBO_RPM_FACTOR = 1.15F;
+   private static final float TURBO_BOOST_FROM = 0.90F;
+   private static final float TURBO_BOOST_MULT = 1.6F;
+   private static final float ANTI_LAG_HOLD = 0.70F;
 
+   // ---------- 挡位 ----------
    private static final int MAX_GEAR = 6;
-   private static final double MAX_SPEED = 40.0;
+   private static final double MAX_SPEED = 44.0;
    private static final int UPSHIFT_TICKS = 12;
    private static final double NEUTRAL_SPEED = 2.0;
    private static final double STOPPED_SPEED = 0.6;
+   /** 手动挡各档最高速度（格/秒）：低档密、高档疏 */
+   private static final double[] GEAR_MAX = {0.0, 5.0, 11.0, 18.0, 26.0, 34.0, 44.0};
+   /** 手动挡倒档最高速度 */
+   private static final double REV_SPEED_LIMIT = 8.0;
+   /** 手动挡基础加速度（格/刻） */
+   private static final double MANUAL_ACCEL = 0.050;
+   /** 换挡切点火时长（tick） */
+   private static final int SHIFT_CUT_TICKS = 2;
 
+   // ---------- 刹车 ----------
+   private static final double BRAKE_DAMP_MANUAL = 0.76;
+   private static final double BRAKE_DAMP_AUTO = 0.78;
+   private static final double ENGINE_BRAKE_BASE = 0.006;
+   private static final double ENGINE_BRAKE_PER_GEAR = 0.0018;
+   private static final double BRAKE_SOUND_MIN = 7.0;
+
+   // ---------- 蓝冰 ----------
+   private static final double ICE_FRICTION = 0.994;
+
+   // ---------- 漂移 ----------
    private static final double DRIFT_MIN_SPEED = 0.20;
    private static final double DRIFT_MIN_ANGLE = 45.0;
    private static final int WHITE_SMOKE_AFTER_TICKS = 60;
@@ -59,12 +86,14 @@ public final class BoatHudSound {
    private static EngineSoundInstance engine = null;
    private static TurboSoundInstance turboSound = null;
    private static DriftSoundInstance drift = null;
+   private static BrakeSoundInstance brakeSound = null;
    private static SoundEvent clutchSound = null;
    private static SoundEvent blowoffSound = null;
    private static SoundEvent gearSound = null;
-   /** 上一次已知的 SoundManager 是否可用，用于检测资源重载后重建音效缓存 */
-   private static boolean sndAlive = true;
+
    private static boolean prevThrottle = false;
+   private static boolean prevClutch = false;
+   private static int shiftCutTicks = 0;
    private static int smokeTick = 0;
    private static int driftTicks = 0;
    private static int burnoutTicks = 0;
@@ -73,6 +102,9 @@ public final class BoatHudSound {
    private static double driftAnchorX = 0.0;
    private static double driftAnchorZ = 0.0;
    private static double prevSpeed = 0.0;
+   private static double prevV = 0.0;
+   private static double neutralCap = 0.0;
+   private static double landSpeed = 0.0;
    private static final int SMOKE_COLOR = 0x121212;
    private static final float SMOKE_SCALE = 1.7F;
 
@@ -85,8 +117,23 @@ public final class BoatHudSound {
          return;
       }
 
-      boolean throttle = mc.player.input.hasForwardImpulse() || mc.options.keyUp.isDown();
-      boolean sHeld = mc.options.keyDown.isDown() && !mc.options.keyUp.isDown();
+      BoatEngineConfig cfg = cfgNow();
+      boolean manual = cfg.gearbox == jewtvet.hud.ConfigEnums.gearbox.Manual;
+      boolean overIce = cfg.land_as_ice;
+
+      // ---------- 输入 ----------
+      boolean customDrive = cfg.drive_input == jewtvet.hud.ConfigEnums.drive_input.Custom;
+      boolean throttle = customDrive ? GearKeys.THROTTLE.isDown()
+         : (mc.player.input.hasForwardImpulse() || mc.options.keyUp.isDown());
+      boolean sHeld = customDrive ? GearKeys.BRAKE.isDown()
+         : (mc.options.keyDown.isDown() && !mc.options.keyUp.isDown());
+      boolean clutch = manual && GearKeys.CLUTCH.isDown();
+
+      // 刹车优先：踩刹车时油门无效
+      if (sHeld) {
+         throttle = false;
+      }
+      boolean rawThrottle = throttle;
 
       Vec3 vel = boat.getDeltaMovement();
       double spd = Math.sqrt(vel.x * vel.x + vel.z * vel.z) * 20.0;
@@ -95,61 +142,239 @@ public final class BoatHudSound {
       double fwdZ = Math.cos(hrad);
       double along = vel.x * fwdX + vel.z * fwdZ;
       boolean movingBackward = sHeld && along < -0.02;
-      boolean revThrottle = movingBackward;
 
-      // ---------- 引擎 / 电机转速 ----------
-      evMode = cfgNow().ev_mode;
-      BoatEngineConfig cfg = cfgNow();
-      float ceil;
+      toggleHotkeys(mc, cfg);
 
+      // ---------- 自定义驾驶 ----------
+      if (customDrive) {
+         applyCustomDrive(mc, boat, fwdX, fwdZ);
+      }
+
+      // ---------- 手动挡换挡 ----------
+      if (manual) {
+         manualGearTick(mc, cfg);
+      }
+
+      // ---------- 蓝冰：所有固体方块摩擦极小 ----------
+      if (overIce) {
+         applyIce(boat);
+      }
+
+      // ---------- 刹车与限速 ----------
+      if (manual) {
+         manualDynamics(mc, boat, fwdX, fwdZ, sHeld, rawThrottle, clutch, spd, throttle, cfg);
+      } else {
+         autoDynamics(boat, fwdX, fwdZ, sHeld);
+      }
+
+      // ---------- 转速 ----------
+      updateRpm(cfg, mc, manual, throttle, rawThrottle, sHeld, clutch, spd);
+
+      // ---------- 涡轮 ----------
+      float turboBefore = turbo;
+      boolean rally = cfg.driving_mode == jewtvet.hud.ConfigEnums.driving_mode.Rally;
+      // 手动挡只有按油门才上压（R 档的油门就是 W）；自动挡 S 倒车也算给油
+      boolean turboSpin = manual ? rawThrottle : (rawThrottle || movingBackward);
+      float turboUp = TURBO_UP * (0.35F + rpm * TURBO_RPM_FACTOR);
       if (cfg.ev_mode) {
-         // 电车没有怠速，也没有动能回收（赛车配置）：
-         //   停止 / 滑行  -> 0（完全静音）
-         //   踩电门       -> 拉满 1.0
-         //   倒档后退     -> 一半
-         ceil = throttle ? 1.0F : (revThrottle ? REV_MAX_RPM : 0.0F);
+         turbo = 0.0F;
+      } else if (turboSpin) {
+         turbo = Math.min(1.0F, turbo + turboUp);
+      } else if (rally && rpm > 0.45F) {
+         turbo = Math.max(ANTI_LAG_HOLD, turbo - TURBO_DOWN * 0.30F);
+         if ((mc.level.getGameTime() % 9L) == 0L) {
+            playBlowoff(mc, cfg, 0.22F, 0.62F);
+         }
       } else {
-         // 燃油车：怠速 0.10，油门到底 1.0，倒档 0.5
-         ceil = throttle ? 1.0F : (revThrottle ? REV_MAX_RPM : IDLE_RPM);
+         turbo = Math.max(0.0F, turbo - TURBO_DOWN);
       }
 
-      float upRate = cfg.ev_mode ? RPM_UP_EV : RPM_UP;
-      float downRate = cfg.ev_mode ? RPM_DOWN_EV : (sHeld ? RPM_DOWN_REVERSE : RPM_DOWN);
-
-      // 回落下限必须是 ceil（目标值），不能是怠速/0：
-      // 用怠速会让 rpm 冲上 1.0 后立刻掉回 0.90，在 0.90~1.00 之间死循环震荡，
-      // 导致 rpm>=0.97 只成立 2 个 tick -> 升挡计时永远清零 -> 挡位卡在 1，
-      // 同时 HUD 读到震荡值 -> 表针与音高一起抖。
-      if (rpm < ceil) {
-         rpm = Math.min(ceil, rpm + upRate);
-      } else {
-         rpm = Math.max(ceil, rpm - downRate);
-      }
-
-      // ---------- 涡轮转速 ----------
-      turbo = cfgNow().ev_mode
-         ? 0.0F
-         : (throttle ? Math.min(1.0F, turbo + TURBO_UP) : Math.max(0.0F, turbo - TURBO_DOWN));
-
-      // ---------- 收油：离合声 + 泄压阀 ----------
-      if (!cfgNow().ev_mode && prevThrottle && !throttle) {
+      // ---------- 收油：离合 + 泄压阀 ----------
+      if (!cfg.ev_mode && prevThrottle && !rawThrottle) {
          if (rpm > 0.30F) {
-            if (clutchSound == null) {
-               clutchSound = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("wakespeed", "clutch"));
-            }
-            mc.player.playSound(clutchSound, 0.80F * cfg.clutchGain(), 0.9F + rpm * 0.25F);
+            playClutch(mc, cfg, 0.80F, 0.9F + rpm * 0.25F);
          }
-         if (rpm >= BLOWOFF_MIN_RPM) {
-            if (blowoffSound == null) {
-               blowoffSound = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("wakespeed", "blowoff"));
-            }
-            mc.player.playSound(blowoffSound, (0.55F + turbo * 0.45F) * cfg.blowoffGain(),
-               0.95F + turbo * 0.20F);
+         if (!rally && turboBefore >= BLOWOFF_MIN_TURBO) {
+            playBlowoff(mc, cfg, (0.55F + turbo * 0.45F), 0.95F + turbo * 0.20F);
          }
       }
-      prevThrottle = throttle;
+      prevThrottle = rawThrottle;
+      prevClutch = clutch;
 
-      // ---------- 挡位（含换挡音） ----------
+      // ---------- 刹车胎噪 ----------
+      updateBrakeSound(mc, sHeld, spd);
+
+      // ---------- 自动挡换挡 ----------
+      if (!manual) {
+         autoGearTick(mc, boat, cfg, throttle, sHeld, spd, spd, movingBackward, along);
+      }
+
+      // ---------- 引擎声 ----------
+      if (rpm > RPM_STOP) {
+         engineGain = 1.0F;
+         if (engine == null || !mc.getSoundManager().isActive(engine)) {
+            clutchSound = null;
+            blowoffSound = null;
+            gearSound = null;
+            engine = new EngineSoundInstance(mc.player);
+            mc.getSoundManager().play(engine);
+         }
+      } else {
+         engineGain = Math.max(0.0F, engineGain - ENGINE_FADE_OUT);
+         if (engineGain <= 0.02F && engine != null) {
+            engine.kill();
+            engine = null;
+         }
+      }
+
+      // ---------- 涡轮声 ----------
+      if (turbo > TURBO_STOP) {
+         if (turboSound == null || !mc.getSoundManager().isActive(turboSound)) {
+            turboSound = new TurboSoundInstance(mc.player);
+            mc.getSoundManager().play(turboSound);
+         }
+      } else if (turboSound != null) {
+         turboSound.kill();
+         turboSound = null;
+      }
+
+      // ---------- 漂移 ----------
+      updateDrift(mc, boat);
+   }
+
+   // ================= 手动挡 =================
+
+   private static void manualGearTick(Minecraft mc, BoatEngineConfig cfg) {
+      if (GearKeys.SHIFT_UP.consumeClick()) {
+         if (gear <= 0) {
+            gear = 1;
+            neutralCap = 0.0;
+         } else if (gear < MAX_GEAR) {
+            gear++;
+         }
+         shiftCutTicks = SHIFT_CUT_TICKS;
+         rpm = Math.max(IDLE_RPM, rpm * 0.68F);
+         playShift(mc, cfg, true);
+      }
+      if (GearKeys.SHIFT_DOWN.consumeClick()) {
+         if (gear > 1) {
+            gear--;
+         } else if (gear == 1) {
+            gear = 0;
+            neutralCap = currentSpeed();
+         } else if (gear == 0) {
+            gear = -1;
+         }
+         rpm = Math.min(1.0F, rpm * 1.18F);
+         playShift(mc, cfg, false);
+      }
+   }
+
+   private static void manualDynamics(Minecraft mc, AbstractBoat boat, double fwdX, double fwdZ,
+                                      boolean sHeld, boolean rawThrottle, boolean clutch,
+                                      double spd, boolean throttle, BoatEngineConfig cfg) {
+      Vec3 v = boat.getDeltaMovement();
+      double along = v.x * fwdX + v.z * fwdZ;
+
+      // 倒档：给油向后推进
+      if (gear == -1) {
+         if (rawThrottle) {
+            // R 档给油：向后推进
+            double target = -REV_SPEED_LIMIT / 20.0;
+            double d = (target - along) * 0.20;
+            boat.setDeltaMovement(v.x + fwdX * d, v.y, v.z + fwdZ * d);
+         } else if (sHeld) {
+            // R 档按 S：刹车
+            boat.setDeltaMovement(v.x * BRAKE_DAMP_MANUAL, v.y, v.z * BRAKE_DAMP_MANUAL);
+         }
+         return;
+      }
+
+      // 空挡：锁住进入时的车速，踩油门不加速
+      if (gear == 0) {
+         double mag = Math.sqrt(v.x * v.x + v.z * v.z);
+         if (mag > neutralCap && mag > 1.0e-4) {
+            double k = neutralCap / mag;
+            boat.setDeltaMovement(v.x * k, v.y, v.z * k);
+         } else {
+            neutralCap = mag;
+         }
+         return;
+      }
+
+      // 刹车：按运动方向整体衰减，并抹掉倒退分量
+      if (sHeld) {
+         double bx = v.x * BRAKE_DAMP_MANUAL;
+         double bz = v.z * BRAKE_DAMP_MANUAL;
+         double balong = bx * fwdX + bz * fwdZ;
+         if (balong < 0.0) {
+            bx -= fwdX * balong;
+            bz -= fwdZ * balong;
+         }
+         boat.setDeltaMovement(bx, v.y, bz);
+         return;
+      }
+
+      // 发动机制动
+      if (!rawThrottle && !clutch && spd > 0.4) {
+         double decel = ENGINE_BRAKE_BASE + (MAX_GEAR - gear) * ENGINE_BRAKE_PER_GEAR;
+         if (along > 0.0) {
+            double na = Math.max(0.0, along - decel);
+            boat.setDeltaMovement(v.x + fwdX * (na - along), v.y, v.z + fwdZ * (na - along));
+         }
+      }
+
+      // 档位限速
+      double limit = gearMax(gear);
+      if (spd > limit) {
+         Vec3 v2 = boat.getDeltaMovement();
+         double scale = Math.max(0.82, 1.0 - (spd - limit) * 0.06);
+         boat.setDeltaMovement(v2.x * scale, v2.y, v2.z * scale);
+      }
+
+      // 档位扭矩：低档起步猛，高档起步无力；涡轮按比例给动力
+      if (rawThrottle && !clutch) {
+         double vNow = Math.sqrt(vel_mag(boat));
+         double dv = vNow - prevV;
+         double gearTorque = 1.0 / (1.0 + (gear - 1) * 0.45);
+         double rpmFactor = 0.20 + 0.80 * rpm;
+         double pull = Math.min(1.0, gearTorque * rpmFactor * 1.6);
+         double boost = 1.0 + turboGain(turbo) * TURBO_POWER_GAIN;
+         double allowed = MANUAL_ACCEL * pull * boost;
+         if (dv > allowed && vNow > 1.0e-4) {
+            double target = prevV + allowed;
+            double k = Math.max(0.0, target / vNow);
+            Vec3 v3 = boat.getDeltaMovement();
+            boat.setDeltaMovement(v3.x * k, v3.y, v3.z * k);
+            vNow = target;
+         }
+         prevV = vNow;
+      } else {
+         prevV = Math.sqrt(vel_mag(boat));
+      }
+   }
+
+   private static double vel_mag(AbstractBoat boat) {
+      Vec3 v = boat.getDeltaMovement();
+      return v.x * v.x + v.z * v.z;
+   }
+
+   // ================= 自动挡 =================
+
+   private static void autoDynamics(AbstractBoat boat, double fwdX, double fwdZ, boolean sHeld) {
+      if (!sHeld) {
+         return;
+      }
+      Vec3 v = boat.getDeltaMovement();
+      double along = v.x * fwdX + v.z * fwdZ;
+      if (along > 0.01) {
+         boat.setDeltaMovement(v.x * BRAKE_DAMP_AUTO, v.y, v.z * BRAKE_DAMP_AUTO);
+      }
+   }
+
+   private static void autoGearTick(Minecraft mc, AbstractBoat boat, BoatEngineConfig cfg,
+                                    boolean throttle, boolean sHeld, double spd, double spd2,
+                                    boolean movingBackward, double along) {
       boolean anyInput = mc.options.keyUp.isDown() || mc.options.keyDown.isDown()
                       || mc.options.keyLeft.isDown() || mc.options.keyRight.isDown()
                       || mc.options.keyJump.isDown();
@@ -158,7 +383,7 @@ public final class BoatHudSound {
          if (gear != -1) {
             gear = -1;
             upshiftTicks = 0;
-            playShift(mc, true);
+            playShift(mc, cfg, true);
          }
       } else if (gear == -1) {
          gear = 0;
@@ -179,60 +404,249 @@ public final class BoatHudSound {
          int bySpeed = gearForSpeed(spd);
          if (gear <= 0) {
             gear = 1;
-            playShift(mc, true);
+            playShift(mc, cfg, true);
          }
          if (bySpeed < gear) {
             gear = bySpeed;
             upshiftTicks = 0;
-            playShift(mc, false);
+            playShift(mc, cfg, false);
          }
          if (gear < MAX_GEAR && rpm >= 0.97F) {
             upshiftTicks++;
          } else {
             upshiftTicks = 0;
          }
-         boolean speedReady = spd >= band() * gear;
-         if (upshiftTicks >= UPSHIFT_TICKS && speedReady && gear < MAX_GEAR) {
+         if (upshiftTicks >= UPSHIFT_TICKS && spd >= band() * gear && gear < MAX_GEAR) {
             gear++;
             upshiftTicks = 0;
-            if (!Common.cfg().ev_mode) { rpm = Math.max(0.45F, rpm * 0.72F); }
-            playShift(mc, true);
+            if (!cfg.ev_mode) {
+               rpm = Math.max(0.45F, rpm * 0.72F);
+            }
+            playShift(mc, cfg, true);
          }
       }
+   }
 
-      // ---------- 引擎循环音 ----------
-      if (rpm > RPM_STOP) {
-         engineGain = 1.0F;
-         if (engine == null || !mc.getSoundManager().isActive(engine)) {
-         // 资源重载后一次性音效的缓存也作废，下次播放时重新解析
-         clutchSound = null;
-         blowoffSound = null;
-         gearSound = null;
-            engine = new EngineSoundInstance(mc.player);
-            mc.getSoundManager().play(engine);
+   // ================= 转速 =================
+
+   private static void updateRpm(BoatEngineConfig cfg, Minecraft mc, boolean manual,
+                                 boolean throttle, boolean rawThrottle, boolean sHeld,
+                                 boolean clutch, double spd) {
+      evMode = cfg.ev_mode;
+      if (manual) {
+         if (shiftCutTicks > 0) {
+            shiftCutTicks--;
+         }
+         float idleFloor = cfg.ev_mode ? 0.0F : IDLE_RPM;
+         float target;
+         if (clutch || shiftCutTicks > 0) {
+            target = idleFloor;
+         } else if (gear == -1) {
+            target = rawThrottle ? REV_MAX_RPM : idleFloor;
+         } else if (gear == 0) {
+            target = rawThrottle ? 1.0F : idleFloor;   // 空挡可自由空踩
+         } else {
+            float ratio = (float)Math.min(1.0, spd / Math.max(0.25, gearMax(gear)));
+            target = cfg.ev_mode ? ratio : (IDLE_RPM + ratio * (1.0F - IDLE_RPM));
+         }
+         if (!cfg.ev_mode && turbo >= TURBO_BOOST_FROM) {
+            target = Math.min(1.0F, target * 1.05F);
+         }
+         rpm += (target - rpm) * 0.28F;
+         if (rpm < 0.0F) rpm = 0.0F;
+         if (rpm > 1.0F) rpm = 1.0F;
+         return;
+      }
+
+      float ceil;
+      if (cfg.ev_mode) {
+         ceil = throttle ? 1.0F : (sHeld && gear == -1 ? REV_MAX_RPM : 0.0F);
+      } else {
+         ceil = throttle ? 1.0F : (sHeld && gear == -1 ? REV_MAX_RPM : IDLE_RPM);
+      }
+      float upRate = cfg.ev_mode ? RPM_UP_EV : RPM_UP;
+      if (!cfg.ev_mode && turbo >= TURBO_BOOST_FROM) {
+         upRate *= TURBO_BOOST_MULT;
+      }
+      float downRate = cfg.ev_mode ? RPM_DOWN_EV : (sHeld ? RPM_DOWN_REVERSE : RPM_DOWN);
+      if (rpm < ceil) {
+         rpm = Math.min(ceil, rpm + upRate);
+      } else {
+         rpm = Math.max(ceil, rpm - downRate);
+      }
+   }
+
+   // ================= 蓝冰 / 自定义驾驶 =================
+
+   private static void applyIce(AbstractBoat boat) {
+      if (boat.isInWater()) {
+         landSpeed = 0.0;
+         return;
+      }
+      Vec3 v = boat.getDeltaMovement();
+      double mag = Math.sqrt(v.x * v.x + v.z * v.z);
+      if (v.y < -0.12) {
+         landSpeed = mag;
+         return;
+      }
+      if (landSpeed > 0.02 && mag > 1.0e-4 && mag < landSpeed) {
+         double target = landSpeed * ICE_FRICTION;
+         if (mag < target) {
+            double k = Math.min(1.0, target / mag);
+            boat.setDeltaMovement(v.x * k, v.y, v.z * k);
+            mag = mag * k;
+         }
+      }
+      landSpeed = mag;
+   }
+
+   private static void applyCustomDrive(Minecraft mc, AbstractBoat boat, double fwdX, double fwdZ) {
+      boolean th = GearKeys.THROTTLE.isDown();
+      boolean br = GearKeys.BRAKE.isDown();
+      boolean left = GearKeys.STEER_LEFT.isDown();
+      boolean right = GearKeys.STEER_RIGHT.isDown();
+      Vec3 v = boat.getDeltaMovement();
+      double along = v.x * fwdX + v.z * fwdZ;
+      double steer = (left ? 1.0 : 0.0) - (right ? 1.0 : 0.0);
+      if (steer != 0.0) {
+         double gain = 0.55 + Math.min(1.0, Math.abs(along) / 0.30) * 2.0;
+         boat.setYRot(boat.getYRot() - (float)(steer * gain));
+      }
+      if (th && !br) {
+         double maxAlong = 0.62;
+         if (along < maxAlong) {
+            double add = Math.min(0.018, maxAlong - along);
+            boat.setDeltaMovement(v.x + fwdX * add, v.y, v.z + fwdZ * add);
+         }
+      }
+   }
+
+   // ================= 工具 =================
+
+   private static BoatEngineConfig cfgNow() {
+      return Common.cfg();
+   }
+
+   private static double turboGain(double t) {
+      if (t <= TURBO_POWER_FROM) {
+         return 0.0;
+      }
+      double x = (t - TURBO_POWER_FROM) / (1.0 - TURBO_POWER_FROM);
+      if (x > 1.0) {
+         x = 1.0;
+      }
+      return x * x;
+   }
+
+   private static double gearMax(int g) {
+      int i = g < 1 ? 1 : (g > MAX_GEAR ? MAX_GEAR : g);
+      return GEAR_MAX[i];
+   }
+
+   private static double band() {
+      return MAX_SPEED / MAX_GEAR;
+   }
+
+   private static int gearForSpeed(double spd) {
+      int g = (int)Math.floor(spd / band()) + 1;
+      if (g < 1) g = 1;
+      if (g > MAX_GEAR) g = MAX_GEAR;
+      return g;
+   }
+
+   private static double currentSpeed() {
+      Minecraft mc = Minecraft.getInstance();
+      if (mc.player == null || !(mc.player.getVehicle() instanceof AbstractBoat b)) {
+         return 0.0;
+      }
+      Vec3 v = b.getDeltaMovement();
+      return Math.sqrt(v.x * v.x + v.z * v.z);
+   }
+
+   private static void toggleHotkeys(Minecraft mc, BoatEngineConfig cfg) {
+      boolean dirty = false;
+      if (GearKeys.TOGGLE_GEARBOX.consumeClick()) {
+         cfg.gearbox = cfg.gearbox == jewtvet.hud.ConfigEnums.gearbox.Manual
+            ? jewtvet.hud.ConfigEnums.gearbox.Auto
+            : jewtvet.hud.ConfigEnums.gearbox.Manual;
+         gear = 0;
+         neutralCap = 0.0;
+         dirty = true;
+      }
+      if (GearKeys.TOGGLE_STYLE.consumeClick()) {
+         cfg.driving_mode = cfg.driving_mode == jewtvet.hud.ConfigEnums.driving_mode.Rally
+            ? jewtvet.hud.ConfigEnums.driving_mode.Civilian
+            : jewtvet.hud.ConfigEnums.driving_mode.Rally;
+         dirty = true;
+      }
+      if (GearKeys.TOGGLE_EV.consumeClick()) {
+         cfg.ev_mode = !cfg.ev_mode;
+         dirty = true;
+      }
+      if (dirty) {
+         me.shedaniel.autoconfig.AutoConfig.getConfigHolder(BoatEngineConfig.class).save();
+      }
+   }
+
+   private static void updateBrakeSound(Minecraft mc, boolean braking, double spd) {
+      boolean want = braking && spd > BRAKE_SOUND_MIN && !driftActive;
+      if (want) {
+         brakeActive = true;
+         brakeIntensity = (float)Math.min(1.0, (spd - BRAKE_SOUND_MIN) / 18.0);
+         if (brakeSound == null || !mc.getSoundManager().isActive(brakeSound)) {
+            brakeSound = new BrakeSoundInstance(mc.player);
+            mc.getSoundManager().play(brakeSound);
          }
       } else {
-         engineGain = Math.max(0.0F, engineGain - ENGINE_FADE_OUT);
-         if (engineGain <= 0.02F && engine != null) {
-            engine.kill();
-            engine = null;
+         brakeActive = false;
+         brakeIntensity = 0.0F;
+         if (brakeSound != null) {
+            brakeSound.kill();
+            brakeSound = null;
          }
       }
+   }
 
-      // ---------- 涡轮循环音 ----------
-      if (turbo > TURBO_STOP) {
-         if (turboSound == null || !mc.getSoundManager().isActive(turboSound)) {
-            turboSound = new TurboSoundInstance(mc.player);
-            mc.getSoundManager().play(turboSound);
-         }
-      } else if (turboSound != null) {
-         turboSound.kill();
-         turboSound = null;
+   private static void playClutch(Minecraft mc, BoatEngineConfig cfg, float vol, float pitch) {
+      if (clutchSound == null) {
+         clutchSound = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("wakespeed", "clutch"));
       }
+      mc.player.playSound(clutchSound, vol * cfg.clutchGain(), pitch);
+   }
 
-      // ---------- 漂移 ----------
+   private static void playBlowoff(Minecraft mc, BoatEngineConfig cfg, float vol, float pitch) {
+      if (blowoffSound == null) {
+         blowoffSound = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("wakespeed", "blowoff"));
+      }
+      mc.player.playSound(blowoffSound, vol * cfg.blowoffGain(), pitch);
+   }
+
+   private static void playShift(Minecraft mc, BoatEngineConfig cfg, boolean up) {
+      if (cfg.ev_mode) {
+         return;
+      }
+      if (clutchSound == null) {
+         clutchSound = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("wakespeed", "clutch"));
+      }
+      if (gearSound == null) {
+         gearSound = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("wakespeed", "gear_shift"));
+      }
+      boolean manual = cfg.gearbox == jewtvet.hud.ConfigEnums.gearbox.Manual;
+      mc.player.playSound(clutchSound, (manual ? 0.55F : 0.40F) * cfg.clutchGain(), up ? 0.95F : 1.06F);
+      mc.player.playSound(gearSound, (manual ? 0.88F : 0.60F) * cfg.gearGain(),
+         0.85F + Math.max(1, gear) * 0.05F);
+   }
+
+   // ================= 漂移 =================
+
+   private static void updateDrift(Minecraft mc, AbstractBoat boat) {
       Vec3 v = boat.getDeltaMovement();
       double hSpeed = Math.sqrt(v.x * v.x + v.z * v.z);
+      // 只要实际在向后移动（倒车 / 挂 R 档），就不算漂移
+      double dr = Math.toRadians(boat.getYRot());
+      double rfx = -Math.sin(dr);
+      double rfz = Math.cos(dr);
+      boolean reversing = (v.x * rfx + v.z * rfz) < -0.02;
       double angleDiff = 0.0;
       double signedAngle = 0.0;
       if (hSpeed > DRIFT_MIN_SPEED) {
@@ -244,7 +658,7 @@ public final class BoatHudSound {
       boolean hardBrake = decel > 0.12 && prevSpeed > 0.50;
       prevSpeed = hSpeed;
 
-      if (movingBackward) {
+      if (reversing) {
          angleDiff = 0.0;
          hardBrake = false;
       }
@@ -252,7 +666,6 @@ public final class BoatHudSound {
       if (angleDiff > DRIFT_MIN_ANGLE || hardBrake) {
          driftActive = true;
          driftIntensity = (float)Math.min(1.0, Math.max((angleDiff - DRIFT_MIN_ANGLE) / 45.0, hardBrake ? 0.55 : 0.0));
-
          int dir = angleDiff > DRIFT_MIN_ANGLE ? (signedAngle > 0.0 ? 1 : -1) : driftDir;
          if (driftTicks == 0 || (dir != driftDir && driftDir != 0)) {
             driftAnchorX = boat.getX();
@@ -267,29 +680,22 @@ public final class BoatHudSound {
          double adz = Math.abs(boat.getZ() - driftAnchorZ);
          boolean inArea = adx <= BURNOUT_HALF && adz <= BURNOUT_HALF;
          boolean hot = inArea && angleDiff > BURNOUT_MIN_ANGLE;
-
-         if (hot) {
-            burnoutTicks++;
-         } else {
-            burnoutTicks = 0;
-         }
+         burnoutTicks = hot ? burnoutTicks + 1 : 0;
          boolean burnout = burnoutTicks >= BURNOUT_TICKS;
 
          if ((smokeTick % 2) == 0) {
             spawnTireSmoke(mc, boat);
          }
-         if (burnout) {
-            spawnWhiteSmoke(mc, boat);
-         } else if (driftTicks >= WHITE_SMOKE_AFTER_TICKS && (smokeTick % 2) == 1) {
-            spawnWhiteSmoke(mc, boat);
+         if (burnout || driftTicks >= WHITE_SMOKE_AFTER_TICKS) {
+            if (burnout || (smokeTick % 2) == 1) {
+               spawnWhiteSmoke(mc, boat);
+            }
          }
          smokeTick++;
-
          if (driftTicks % BURNOUT_TICKS == 0) {
             driftAnchorX = boat.getX();
             driftAnchorZ = boat.getZ();
          }
-
          if (drift == null || !mc.getSoundManager().isActive(drift)) {
             drift = new DriftSoundInstance(mc.player);
             mc.getSoundManager().play(drift);
@@ -306,36 +712,6 @@ public final class BoatHudSound {
             drift = null;
          }
       }
-   }
-
-   private static BoatEngineConfig cfgNow() {
-      return Common.cfg();
-   }
-
-   private static void playShift(Minecraft mc, boolean up) {
-      BoatEngineConfig cfg = Common.cfg();
-      if (cfg.ev_mode) {
-         return;   // 电车无离合/挂挡
-      }
-      if (clutchSound == null) {
-         clutchSound = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("wakespeed", "clutch"));
-      }
-      if (gearSound == null) {
-         gearSound = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("wakespeed", "gear_shift"));
-      }
-      mc.player.playSound(clutchSound, 0.50F * cfg.clutchGain(), up ? 0.95F : 1.06F);
-      mc.player.playSound(gearSound, 0.70F * cfg.gearGain(), 0.85F + Math.max(1, gear) * 0.05F);
-   }
-
-   private static double band() {
-      return MAX_SPEED / MAX_GEAR;
-   }
-
-   private static int gearForSpeed(double spd) {
-      int g = (int)Math.floor(spd / band()) + 1;
-      if (g < 1) g = 1;
-      if (g > MAX_GEAR) g = MAX_GEAR;
-      return g;
    }
 
    private static void spawnTireSmoke(Minecraft mc, AbstractBoat boat) {
@@ -378,8 +754,25 @@ public final class BoatHudSound {
       }
    }
 
+   /**
+    * 手动挡刹车时是否要屏蔽「后退」输入。
+    * 手动挡下 S 一律只刹车；倒车必须挂 R 档并按油门键。
+    */
+   public static boolean shouldSuppressReverse() {
+      BoatEngineConfig cfg = Common.cfg();
+      if (cfg.gearbox != jewtvet.hud.ConfigEnums.gearbox.Manual) {
+         return false;
+      }
+      boolean customDrive = cfg.drive_input == jewtvet.hud.ConfigEnums.drive_input.Custom;
+      if (customDrive) {
+         return GearKeys.BRAKE.isDown() && !GearKeys.THROTTLE.isDown();
+      }
+      Minecraft mc = Minecraft.getInstance();
+      return mc.options.keyDown.isDown() && !mc.options.keyUp.isDown();
+   }
+
    public static boolean shouldMuteVanillaBoatSound(Object identifier) {
-      if (!Common.cfg().mute_vanilla_boat || rpm <= 0.001F) {
+      if (!Common.cfg().mute_vanilla_boat) {
          return false;
       }
       String s = String.valueOf(identifier);
@@ -393,15 +786,23 @@ public final class BoatHudSound {
       upshiftTicks = 0;
       driftActive = false;
       driftIntensity = 0.0F;
+      brakeActive = false;
+      brakeIntensity = 0.0F;
       driftTicks = 0;
       burnoutTicks = 0;
       driftDir = 0;
       smokeTick = 0;
       prevSpeed = 0.0;
+      prevV = 0.0;
+      neutralCap = 0.0;
+      landSpeed = 0.0;
+      shiftCutTicks = 0;
       engineGain = 1.0F;
       prevThrottle = false;
+      prevClutch = false;
       if (engine != null) { engine.kill(); engine = null; }
       if (turboSound != null) { turboSound.kill(); turboSound = null; }
       if (drift != null) { drift.kill(); drift = null; }
+      if (brakeSound != null) { brakeSound.kill(); brakeSound = null; }
    }
 }
