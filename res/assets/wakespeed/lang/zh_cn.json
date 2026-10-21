@@ -1,1 +1,22 @@
-{"subtitles.boatengine.engine":"引擎","subtitles.boatengine.turbo":"涡轮","subtitles.boatengine.drift_skid":"轮胎打滑","subtitles.boatengine.clutch":"离合","subtitles.boatengine.blowoff":"泄压阀","subtitles.boatengine.gear_shift":"挂挡"}
+{
+    "subtitles.boatengine.engine":  "引擎",
+    "subtitles.boatengine.turbo":  "涡轮",
+    "subtitles.boatengine.drift_skid":  "轮胎打滑",
+    "subtitles.boatengine.clutch":  "离合",
+    "subtitles.boatengine.blowoff":  "泄压阀",
+    "subtitles.boatengine.gear_shift":  "挂挡",
+    "key.category.wakespeed.keys":  "浪速",
+    "key.wakespeed.settings":  "打开设置（F9）",
+    "key.wakespeed.toggle_style":  "切换拉力/民用",
+    "key.wakespeed.settings_alt":  "打开设置（F10）",
+    "key.wakespeed.steer_right":  "右转",
+    "key.wakespeed.throttle":  "油门",
+    "key.wakespeed.toggle_ev":  "切换燃油/电车",
+    "key.wakespeed.shift_down":  "降档",
+    "key.wakespeed.steer_left":  "左转",
+    "key.wakespeed.clutch":  "离合",
+    "key.wakespeed.toggle_gearbox":  "切换自动/手动挡",
+    "key.wakespeed.brake":  "刹车",
+    "key.wakespeed.shift_up":  "升档",
+    "key.categories.wakespeed.keys":  "浪速"
+}
