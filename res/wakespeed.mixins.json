@@ -4,6 +4,6 @@
   "package": "jewtvet.boathud.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [],
-  "client": ["SoundManagerMixin"],
+  "client": ["SoundManagerMixin", "KeyboardInputMixin"],
   "injectors": { "defaultRequire": 1 }
 }
