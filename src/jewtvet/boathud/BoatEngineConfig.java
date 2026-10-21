@@ -23,6 +23,18 @@ public class BoatEngineConfig implements ConfigData {
 
    public boolean mute_vanilla_boat = true;
 
+   /** 挡位模式：自动 / 手动 */
+   public jewtvet.hud.ConfigEnums.gearbox gearbox = jewtvet.hud.ConfigEnums.gearbox.Auto;
+
+   /** 驾驶风格：拉力（抗迟滞）/ 民用（泄压阀） */
+   public jewtvet.hud.ConfigEnums.driving_mode driving_mode = jewtvet.hud.ConfigEnums.driving_mode.Rally;
+
+   /** 驾驶输入：原版 WASD / 自定义按键 */
+   public jewtvet.hud.ConfigEnums.drive_input drive_input = jewtvet.hud.ConfigEnums.drive_input.Vanilla;
+
+   /** 陆地视作蓝冰：所有固体方块摩擦极小 */
+   public boolean land_as_ice = false;
+
    @BoundedDiscrete(min = 50L, max = 150L) public int pitch_engine = 100;
 
    public float engineGain()  { return volume_engine / 100.0F; }
