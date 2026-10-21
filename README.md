@@ -1,5 +1,7 @@
 # WakeSpeed 浪速
 
+> **1.1.0** 新增手动挡（R-N-1-6）、离合、刹车系统、涡轮动力曲线、拉力/民用双模式、陆地蓝冰、12 个可自定义键位。
+
 > **把原版木船变成赛车：赛车风格 HUD、燃油与电驱两套音效、专业赛车视角，一份模组全部搞定。**
 >
 > *Turn a vanilla boat into a race car: racing-style HUD, gasoline & EV engine audio, and a proper racing camera — all in one mod.*
