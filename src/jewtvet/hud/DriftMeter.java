@@ -26,6 +26,10 @@ public final class DriftMeter {
    public static int direction = 0;
 
    private static final double MIN_ANGLE = 45.0;
+   /** 退出滞回角：低于这个角度且持续 GRACE_TICKS 才判定结束 */
+   private static final double HOLD_ANGLE = 32.0;
+   private static final double HOLD_SPEED = 3.0;
+   private static final int GRACE_TICKS = 10;
    private static final double BURNOUT_MIN_ANGLE = 60.0;
    private static final double MIN_SPEED = 4.0;
    private static final double AREA_HALF = 6.0;          // 12x12 -> 半边长 6
@@ -34,6 +38,7 @@ public final class DriftMeter {
 
    private static double anchorX = 0.0;
    private static double anchorZ = 0.0;
+   private static int graceTicks = 0;
 
    private DriftMeter() {
    }
@@ -47,17 +52,32 @@ public final class DriftMeter {
    }
 
    public static void tick(double x, double z, double speed, double driftAngle) {
-      boolean active = Math.abs(driftAngle) > MIN_ANGLE && speed > MIN_SPEED;
+      double ang = Math.abs(driftAngle);
+      boolean enter = ang > MIN_ANGLE && speed > MIN_SPEED;
+      boolean hold = ang > HOLD_ANGLE && speed > HOLD_SPEED;
 
-      if (!active) {
-         reset();
-         return;
+      if (!drifting) {
+         if (!enter) {
+            reset();
+            return;
+         }
+      } else {
+         // 已经处于漂移：角度短暂掉到阈值以下也先不结束（宽限 0.5 秒）
+         if (hold) {
+            graceTicks = 0;
+         } else {
+            graceTicks++;
+            if (graceTicks > GRACE_TICKS) {
+               reset();
+               return;
+            }
+         }
       }
 
       int dir = driftAngle > 0.0 ? 1 : -1;
 
-      if (!drifting || dir != direction) {
-         // 刚开始，或转向反了 -> 两个计时都重新开始
+      // 只有当角度明显反向时才重新开始，避免在 0° 附近来回抖
+      if (!drifting || (dir != direction && ang > MIN_ANGLE)) {
          drifting = true;
          driftTicks = 0;
          burnoutTicks = 0;
@@ -65,6 +85,7 @@ public final class DriftMeter {
          anchorX = x;
          anchorZ = z;
          direction = dir;
+         graceTicks = 0;
       }
 
       driftTicks++;
@@ -72,9 +93,8 @@ public final class DriftMeter {
       double dx = Math.abs(x - anchorX);
       double dz = Math.abs(z - anchorZ);
       boolean inArea = dx <= AREA_HALF && dz <= AREA_HALF;
-      boolean hot = inArea && Math.abs(driftAngle) > BURNOUT_MIN_ANGLE;
+      boolean hot = inArea && ang > BURNOUT_MIN_ANGLE;
 
-      // 烧胎计时：条件成立才涨，否则立刻清零
       if (hot) {
          burnoutTicks++;
       } else {
@@ -82,7 +102,6 @@ public final class DriftMeter {
       }
       burnout = burnoutTicks >= BURNOUT_TICKS;
 
-      // 判定完再滚动原点
       if (driftTicks % ANCHOR_RESET_TICKS == 0) {
          anchorX = x;
          anchorZ = z;
