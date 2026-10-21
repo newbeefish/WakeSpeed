@@ -245,11 +245,13 @@ public final class BoatHudSound {
    // ================= 手动挡 =================
 
    private static void manualGearTick(Minecraft mc, BoatEngineConfig cfg) {
+      // 电车没有变速箱：只有 前进(1) / 空挡(0) / 倒档(-1)
+      int maxGear = cfg.ev_mode ? 1 : MAX_GEAR;
       if (GearKeys.SHIFT_UP.consumeClick()) {
          if (gear <= 0) {
             gear = 1;
             neutralCap = 0.0;
-         } else if (gear < MAX_GEAR) {
+         } else if (gear < maxGear) {
             gear++;
          }
          shiftCutTicks = SHIFT_CUT_TICKS;
@@ -325,7 +327,8 @@ public final class BoatHudSound {
       }
 
       // 档位限速
-      double limit = gearMax(gear);
+      // 档位限速（电车无档位，统一按最高档速度）
+      double limit = cfgNow().ev_mode ? gearMax(MAX_GEAR) : gearMax(gear);
       if (spd > limit) {
          Vec3 v2 = boat.getDeltaMovement();
          double scale = Math.max(0.82, 1.0 - (spd - limit) * 0.06);
@@ -336,7 +339,8 @@ public final class BoatHudSound {
       if (rawThrottle && !clutch) {
          double vNow = Math.sqrt(vel_mag(boat));
          double dv = vNow - prevV;
-         double gearTorque = 1.0 / (1.0 + (gear - 1) * 0.45);
+         int effGear = cfg.ev_mode ? 1 : gear;                 // 电车按 1 档算扭矩
+         double gearTorque = 1.0 / (1.0 + (effGear - 1) * 0.45);
          double rpmFactor = 0.20 + 0.80 * rpm;
          double pull = Math.min(1.0, gearTorque * rpmFactor * 1.6);
          double boost = 1.0 + turboGain(turbo) * TURBO_POWER_GAIN;
@@ -375,6 +379,26 @@ public final class BoatHudSound {
    private static void autoGearTick(Minecraft mc, AbstractBoat boat, BoatEngineConfig cfg,
                                     boolean throttle, boolean sHeld, double spd, double spd2,
                                     boolean movingBackward, double along) {
+      // 电车没有变速箱：D(1) / N(0) / R(-1)
+      if (cfg.ev_mode) {
+         boolean ani = mc.options.keyUp.isDown() || mc.options.keyDown.isDown()
+                     || mc.options.keyLeft.isDown() || mc.options.keyRight.isDown();
+         int want;
+         if (movingBackward) {
+            want = -1;
+         } else if (sHeld && spd < STOPPED_SPEED) {
+            want = 0;
+         } else if (!ani && spd < NEUTRAL_SPEED) {
+            want = 0;
+         } else {
+            want = 1;
+         }
+         if (gear != want) {
+            gear = want;
+            upshiftTicks = 0;
+         }
+         return;
+      }
       boolean anyInput = mc.options.keyUp.isDown() || mc.options.keyDown.isDown()
                       || mc.options.keyLeft.isDown() || mc.options.keyRight.isDown()
                       || mc.options.keyJump.isDown();
@@ -433,6 +457,15 @@ public final class BoatHudSound {
                                  boolean throttle, boolean rawThrottle, boolean sHeld,
                                  boolean clutch, double spd) {
       evMode = cfg.ev_mode;
+
+      // 电车没有变速箱：转速直接与车速成正比
+      if (cfg.ev_mode) {
+         float target = (float)Math.min(1.0, spd / Math.max(1.0, gearMax(MAX_GEAR)));
+         rpm += (target - rpm) * 0.28F;
+         if (rpm < 0.0F) rpm = 0.0F;
+         if (rpm > 1.0F) rpm = 1.0F;
+         return;
+      }
       if (manual) {
          if (shiftCutTicks > 0) {
             shiftCutTicks--;
