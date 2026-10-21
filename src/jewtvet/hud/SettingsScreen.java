@@ -44,6 +44,50 @@ public final class SettingsScreen {
          "\u5173\uff1a\u71c3\u6cb9\u5f15\u64ce + \u6da1\u8f6e + \u6cc4\u538b\u9600 + \u79bb\u5408 + \u6302\u6321"))
          .build());
 
+      // ---------- 驾驶设置 ----------
+      sound.addEntry(eb.startEnumSelector(
+            Component.literal("挡位模式（Gearbox）"),
+            ConfigEnums.gearbox.class, snd.gearbox)
+         .setDefaultValue(ConfigEnums.gearbox.Auto)
+         .setSaveConsumer(v -> snd.gearbox = v)
+         .build());
+      sound.addEntry(eb.startTextDescription(Component.literal(
+         "自动档：按速度自动升降挡，S 刹车，停住后继续按 S 倒车\n" +
+         "手动档：X 升档 / Z 降档 / C 离合，档序 R-N-1-2-3-4-5-6\n" +
+         "手动档 S 只刹车，挂 R 后按 W 倒车；松油门有发动机制动"))
+         .build());
+      sound.addEntry(eb.startEnumSelector(
+            Component.literal("驾驶风格（Driving mode）"),
+            ConfigEnums.driving_mode.class, snd.driving_mode)
+         .setDefaultValue(ConfigEnums.driving_mode.Rally)
+         .setSaveConsumer(v -> snd.driving_mode = v)
+         .build());
+      sound.addEntry(eb.startTextDescription(Component.literal(
+         "拉力：松油门涡轮保持 70%，排气爆鸣，无泄压阀\n" +
+         "民用：松油门涡轮泄压，有泄压阀嗤声"))
+         .build());
+      sound.addEntry(eb.startEnumSelector(
+            Component.literal("驾驶输入（Drive input）"),
+            ConfigEnums.drive_input.class, snd.drive_input)
+         .setDefaultValue(ConfigEnums.drive_input.Vanilla)
+         .setSaveConsumer(v -> snd.drive_input = v)
+         .build());
+      sound.addEntry(eb.startBooleanToggle(
+            Component.literal("陆地视作蓝冰（Land as blue ice）"), snd.land_as_ice)
+         .setDefaultValue(false)
+         .setSaveConsumer(v -> snd.land_as_ice = v)
+         .build());
+      sound.addEntry(eb.startTextDescription(Component.literal(
+         "开：所有固体方块的摩擦被抵消，船会一直滑（水面按原版）"))
+         .build());
+      sound.addEntry(eb.startTextDescription(Component.literal(
+         "当前键位：" +
+         jewtvet.boathud.GearKeys.SHIFT_UP.getTranslatedKeyMessage().getString() + " 升档 / " +
+         jewtvet.boathud.GearKeys.SHIFT_DOWN.getTranslatedKeyMessage().getString() + " 降档 / " +
+         jewtvet.boathud.GearKeys.CLUTCH.getTranslatedKeyMessage().getString() + " 离合\n" +
+         "修改键位：F9 菜单 → 按键设置"))
+         .build());
+
       sound.addEntry(intSlider(eb, "\u5f15\u64ce / \u7535\u673a\uff08Engine / Motor %\uff09", snd.volume_engine, 0, 200, v -> snd.volume_engine = v, 100));
       sound.addEntry(intSlider(eb, "\u6da1\u8f6e\uff08Turbo %\uff09", snd.volume_turbo, 0, 200, v -> snd.volume_turbo = v, 100));
       sound.addEntry(intSlider(eb, "\u6cc4\u538b\u9600\uff08Blow-off %\uff09", snd.volume_blowoff, 0, 200, v -> snd.volume_blowoff = v, 100));
