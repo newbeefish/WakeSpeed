@@ -72,11 +72,11 @@ public class Common implements ClientModInitializer {
          }
          prevResetKey = resetKey;
 
-         boolean cfgKey = playing && InputConstants.isKeyDown(mc.getWindow(), KEY_CONFIG);
-         if (cfgKey && !prevConfigKey) {
-            Screens.open(mc, SettingsScreen.create(null));
+         // 设置面板：标准键位，可在 选项->控制 修改
+         if (jewtvet.boathud.GearKeys.OPEN_SETTINGS.consumeClick()
+            || jewtvet.boathud.GearKeys.OPEN_SETTINGS_ALT.consumeClick()) {
+            Screens.open(mc, RootScreen.create(null));
          }
-         prevConfigKey = cfgKey;
 
          if (mc.player.getVehicle() instanceof AbstractBoat boat) {
             DriftMeter.tick(boat.getX(), boat.getZ(), hudData.speed, hudData.driftAngle);
