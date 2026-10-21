@@ -1,98 +1,55 @@
-## WakeSpeed 1.0.0 浪速
+# WakeSpeed 1.1.0 浪速
 
-Minecraft 赛车船模组第一个正式版本。把原版木船变成赛车。
+## 新功能
 
-> First stable release. Turns a vanilla Minecraft boat into a race car.
+### 手动挡（Manual gearbox）
+- 档位顺序：**R - N - 1 - 2 - 3 - 4 - 5 - 6**
+- **X 升档 / Z 降档 / C 离合**，全部可在按键设置里修改
+- 一档再降进空挡，空挡再降进倒档；倒档后按油门（W）向后行驶
+- 递进式速段：1 档 5 → 2 档 11 → 3 档 18 → 4 档 26 → 5 档 34 → 6 档 44 格/秒
+- **档位扭矩**：低档起步猛，高档在低速几乎推不动
+- **换挡切点火**：升档瞬间油门失效 2 刻，转速掉 32%
+- **降挡补油**：转速瞬升 18%
+- **转速跟车速**：挂档后转速由「车速 ÷ 当前档上限」决定，怠速 800 → 红区 8000
+- **发动机制动**：松油门自动减速，低档更明显
+- **离合**：按住 C 断开动力，转速回怠速
 
-**适用版本 / Compatible:** Fabric 26.1.2 / 26.2
+### 刹车系统
+- **刹车优先于油门**：同时按 W + S 只生效刹车
+- **按运动方向减速**：漂移中刹车会整体减速，不再只砍船头方向
+- 手动挡按 S **只刹车、不倒退**（通过屏蔽后退输入实现，服务器端也不会倒划）
+- 自动挡按 S 刹车，停住后继续按才倒车
+- **高速刹车胎噪**：超过 7 格/秒开始，速度越快越响
 
----
+### 涡轮
+- **倒车也会上压**
+- **上压速率随转速变化**：怠速慢、满转快
+- **70% 起按比例给动力**：到 100% 时扭矩变为 2.1 倍（平方曲线）
+- **满压才触发泄压阀**（民用模式），不再按转速判断
 
-## 中文
+### 拉力 / 民用双模式
+| 模式 | 涡轮 | 声音 |
+|---|---|---|
+| 拉力 Rally | 松油门保持 70%（抗迟滞） | 排气周期爆鸣，无泄压阀 |
+| 民用 Civilian | 松油门完全泄压 | 泄压阀「嗤」 |
 
-### 仪表
-- 三种表盘：**条形表**（拉力 LED 分段）、**圆形表**（指针）、**电表**（功率/电流/电压/转速）
-- 涡轮指示：条形表下方白色横条；圆形表轴心上方扇形小圆盘
-- 电车模式自动隐藏涡轮指示
-- 满转断油抖动（燃油车）、PID 稳定（电车）、怠速游动
+### 陆地视作蓝冰
+- 打开后**所有固体方块**摩擦被抵消，船一直滑（水面按原版）
+- 蓝冰级摩擦：每刻保留 99.4%
 
-### 音效
-- 燃油：引擎 / 涡轮 / 泄压阀 / 离合 / 挂挡，**各自独立音量 0–200%**
-- 电驱：真实电机录音，0.23 秒拉满、松手 0.1 秒归零、静止全静音
-- 一个开关切换油车 / 电车
-- 引擎音高补偿
+### 键位系统（12 个全部可改）
+- 手动挡：升档 / 降档 / 离合
+- 自定义驾驶：油门 / 刹车 / 左转 / 右转（可完全替代 WASD）
+- 功能：F9 设置、F10 备用、G 切换自动手动、H 切换拉力民用、V 切换燃油电车
+- **F9 菜单直接给出「设置」和「按键设置」两个按钮**
+- 分类名「浪速」，在 选项 → 控制 → 按键绑定 里
 
-### 赛车视角
-- 镜头跟随船头方向、平滑插值，高速过弯不甩
-- 默认开启，可关闭，平滑度可调
+## 修复
+- 涡轮满压松手没有泄压阀声（改为用松手前的涡轮值判断）
+- 左右转向的划水声没被屏蔽（去掉了错误的转速前提）
+- 倒车时误判漂移、误触发漂移计时（改为按实际运动方向判断）
+- 26.1.2 的 jar 元数据写成 ~26.2 导致无法加载
 
-### 冰面样式
-- 冰 / 霜冰 → 橙黄 `#FFBA40`
-- 浮冰 → 浅灰
-- 蓝冰 → 深灰
-- 三态：启用 / 关闭 / 上船自动
-
-### 其他
-- 小地图、漂移计时（含烧胎判定）、圈速计时
-- 全部 HUD 部件可开关、百分比定位
-- **F9 / F10** 统一设置面板
-
----
-
-## English
-
-### Gauges
-- Three dashboards: **bar** (rally LED), **dial** (needle), **EV meter** (kW / A / V / RPM)
-- Turbo: white bar under the LED strip, or pie-slice disc above the dial hub
-- Turbo hidden automatically in EV mode
-- Rev-limiter jitter (gas), PID-stable (EV), idle flutter
-
-### Audio
-- Gas: engine / turbo / blow-off / clutch / gear shift, **independent 0–200% volume**
-- EV: real motor recording, full spool in 0.23 s, silent 0.1 s after lifting off
-- One toggle switches gas ↔ EV
-- Engine pitch offset
-
-### Racing camera
-- Follows boat heading with smooth interpolation
-- On by default, toggleable, adjustable smoothness
-
-### Ice style
-- Ice / frosted ice → orange-yellow `#FFBA40`
-- Packed ice → light grey
-- Blue ice → dark grey
-- Three states: on / off / auto-on-boat
-
-### Extras
-- Minimap, drift timer with burnout detection, lap timer
-- Every HUD element toggleable and positionable
-- Unified **F9 / F10** settings screen
-
----
-
-## 依赖 / Dependencies
-
-| 必需 / Required |
-|---|
-| Fabric Loader ≥ 0.19.5 |
-| Fabric API |
-| Cloth Config API |
-
----
-
-## 安装 / Install
-
-1. 安装 Fabric Loader + Fabric API + Cloth Config
-2. 把对应版本的 jar 放进 `.minecraft/mods/`
-3. 启动游戏，按 **F9** 打开设置
-
-下载 26.1.2 用 `WakeSpeed-1.0.0-26.1.2.jar`，26.2 用 `WakeSpeed-1.0.0-26.2.jar`。
-
----
-
-## 授权 / License
-
-**GPL-3.0** — 源码：https://github.com/newbeefish/WakeSpeed
-
-修改自 [BoatHud (NFS)](https://modrinth.com/mod/boathud-nfs)（jewtvet, MIT）与 [BoatCam](https://modrinth.com/mod/boatcam)（Bstn1802 & Pigalala, GPL-3.0）。
-音效：公有领域 / CC-BY 3.0，详见仓库 `CREDITS.md`。
+## 说明
+- 纯客户端模组，服务器不需要安装
+- 联机时高速行驶可能被服务器拉回（客户端预测限制）
