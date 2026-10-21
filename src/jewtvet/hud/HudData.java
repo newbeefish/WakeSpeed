@@ -90,10 +90,9 @@ public class HudData {
          double crossY = fz * hx - fx * hz;
          this.driftAngle = angle * (crossY >= 0.0 ? -1 : 1);
 
-         // 倒档后退时不算漂移（速度与船头相反会让夹角接近 180°，误触发）
-         boolean revInput = Common.client.options.keyDown.isDown()
-                         && !Common.client.options.keyUp.isDown();
-         if (revInput && dot < 0.0) {
+         // 只要实际在向后移动（倒车 / 挂 R 档 / 被撞），就不算漂移
+         // 否则速度与船头相反会让夹角接近 180°，误触发漂移计时
+         if (dot < 0.0) {
             this.driftAngle = 0.0;
          }
          if (Double.isNaN(this.driftAngle)) {
