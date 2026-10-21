@@ -34,6 +34,30 @@ public class ConfigEnums {
       ice_concrete(String label) { this.label = label; }
       @Override public String toString() { return label; }
    }
+   public enum gearbox {
+      Auto("自动档（Auto）"),
+      Manual("手动档（Manual）");
+      private final String label;
+      gearbox(String label) { this.label = label; }
+      @Override public String toString() { return label; }
+   }
+
+   public enum driving_mode {
+      Rally("拉力（Rally）"),
+      Civilian("民用（Civilian）");
+      private final String label;
+      driving_mode(String label) { this.label = label; }
+      @Override public String toString() { return label; }
+   }
+
+   public enum drive_input {
+      Vanilla("原版WASD（Vanilla）"),
+      Custom("自定义按键（Custom）");
+      private final String label;
+      drive_input(String label) { this.label = label; }
+      @Override public String toString() { return label; }
+   }
+
    public enum resize_map { Yes, No }
    public enum move_hp_lower { Yes, No }
    public enum render_hp { Yes, No }
