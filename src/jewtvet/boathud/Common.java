@@ -19,6 +19,7 @@ public class Common implements ClientModInitializer {
    @Override
    public void onInitializeClient() {
       AutoConfig.register(BoatEngineConfig.class, GsonConfigSerializer::new);
+      GearKeys.register();
       CONFIG = AutoConfig.getConfigHolder(BoatEngineConfig.class).getConfig();
 
       ClientTickEvents.END_CLIENT_TICK.register(mc -> {
