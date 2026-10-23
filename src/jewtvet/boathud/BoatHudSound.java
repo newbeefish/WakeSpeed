@@ -76,15 +76,15 @@ public final class BoatHudSound {
    private static final double ICE_FRICTION = 0.994;
 
    // ---------- 漂移 ----------
-   private static final double DRIFT_MIN_SPEED = 0.20;
+   private static final double DRIFT_MIN_SPEED = 0.10;   // 2 格/秒，大角度甩尾会掉速，别设太高
    private static final double DRIFT_MIN_ANGLE = 45.0;
-   /** 漂移退出的滞回角 + 宽限帧，避免在阈值附近抖动导致特效闪断 */
-   private static final double DRIFT_HOLD_ANGLE = 32.0;
-   private static final int DRIFT_GRACE_TICKS = 10;
-   private static final int WHITE_SMOKE_AFTER_TICKS = 60;
+   /** 烧胎判定时长（1 秒） */
    private static final int BURNOUT_TICKS = 20;
    private static final double BURNOUT_MIN_ANGLE = 60.0;
+   /** 烧胎范围：原点 ±6 格 */
    private static final double BURNOUT_HALF = 6.0;
+   /** 急刹冒烟的减速阈值（格/刻） */
+   private static final double BRAKE_SMOKE_DECEL = 0.10;
 
    private static EngineSoundInstance engine = null;
    private static TurboSoundInstance turboSound = null;
@@ -98,14 +98,13 @@ public final class BoatHudSound {
    private static boolean prevClutch = false;
    private static int shiftCutTicks = 0;
    private static int smokeTick = 0;
-   private static int driftTicks = 0;
-   private static int burnoutTicks = 0;
-   private static int driftDir = 0;
-   private static int driftGrace = 0;
-   private static int upshiftTicks = 0;
+   private static int brakeSmokeTick = 0;
    private static double driftAnchorX = 0.0;
    private static double driftAnchorZ = 0.0;
-   private static double prevSpeed = 0.0;
+   private static double prevSpd = 0.0;
+   private static int driftTicks = 0;
+   private static int burnoutTicks = 0;
+   private static int upshiftTicks = 0;
    private static double prevV = 0.0;
    private static double neutralCap = 0.0;
    private static double landSpeed = 0.0;
@@ -201,7 +200,7 @@ public final class BoatHudSound {
       prevClutch = clutch;
 
       // ---------- 刹车胎噪 ----------
-      updateBrakeSound(mc, sHeld, spd);
+      updateBrakeSound(mc, boat, sHeld, spd);
 
       // ---------- 自动挡换挡 ----------
       if (!manual) {
@@ -286,7 +285,7 @@ public final class BoatHudSound {
             boat.setDeltaMovement(v.x + fwdX * d, v.y, v.z + fwdZ * d);
          } else if (sHeld) {
             // R 档按 S：刹车
-            boat.setDeltaMovement(v.x * BRAKE_DAMP_MANUAL, v.y, v.z * BRAKE_DAMP_MANUAL);
+            boat.setDeltaMovement(v.x * brakeDamp(BRAKE_DAMP_MANUAL), v.y, v.z * brakeDamp(BRAKE_DAMP_MANUAL));
          }
          return;
       }
@@ -294,8 +293,8 @@ public final class BoatHudSound {
       // 空挡：锁住进入时的车速，踩油门不加速；按 S 可以刹车
       if (gear == 0) {
          if (sHeld) {
-            boat.setDeltaMovement(v.x * BRAKE_DAMP_MANUAL, v.y, v.z * BRAKE_DAMP_MANUAL);
-            neutralCap = Math.sqrt(v.x * v.x + v.z * v.z) * BRAKE_DAMP_MANUAL;
+            boat.setDeltaMovement(v.x * brakeDamp(BRAKE_DAMP_MANUAL), v.y, v.z * brakeDamp(BRAKE_DAMP_MANUAL));
+            neutralCap = Math.sqrt(v.x * v.x + v.z * v.z) * brakeDamp(BRAKE_DAMP_MANUAL);
             return;
          }
          double mag = Math.sqrt(v.x * v.x + v.z * v.z);
@@ -310,8 +309,8 @@ public final class BoatHudSound {
 
       // 刹车：按运动方向整体衰减，并抹掉倒退分量
       if (sHeld) {
-         double bx = v.x * BRAKE_DAMP_MANUAL;
-         double bz = v.z * BRAKE_DAMP_MANUAL;
+         double bx = v.x * brakeDamp(BRAKE_DAMP_MANUAL);
+         double bz = v.z * brakeDamp(BRAKE_DAMP_MANUAL);
          double balong = bx * fwdX + bz * fwdZ;
          if (balong < 0.0) {
             bx -= fwdX * balong;
@@ -376,7 +375,8 @@ public final class BoatHudSound {
       double mag = Math.sqrt(v.x * v.x + v.z * v.z);
       // 只要不是已经在倒车就刹车；转向时 along 接近 0 也照样刹
       if (along > -0.02 && mag > 0.02) {
-         boat.setDeltaMovement(v.x * BRAKE_DAMP_AUTO, v.y, v.z * BRAKE_DAMP_AUTO);
+         double dampA = brakeDamp(BRAKE_DAMP_AUTO);
+         boat.setDeltaMovement(v.x * dampA, v.y, v.z * dampA);
       }
    }
 
@@ -407,7 +407,15 @@ public final class BoatHudSound {
                       || mc.options.keyLeft.isDown() || mc.options.keyRight.isDown()
                       || mc.options.keyJump.isDown();
 
-      if (movingBackward) {
+      // 倒车状态带滞回：转向会让 along 抖动，不能一抖就掉回 N
+      boolean wantReverse;
+      if (gear == -1) {
+         wantReverse = sHeld && spd > 0.03 && along < 0.10;
+      } else {
+         wantReverse = sHeld && along < -0.02;
+      }
+
+      if (wantReverse) {
          if (gear != -1) {
             gear = -1;
             upshiftTicks = 0;
@@ -562,6 +570,22 @@ public final class BoatHudSound {
       return x * x;
    }
 
+   /** 按配置的刹车力度调整阻尼系数（100% = 原值） */
+   private static double brakeDamp(double base) {
+      double f = cfgNow().brakeFactor();
+      if (f <= 0.0) {
+         return 1.0;      // 最低档 = 原版，不做任何额外减速
+      }
+      double damp = 1.0 - (1.0 - base) * f;
+      if (damp < 0.30) {
+         damp = 0.30;
+      }
+      if (damp > 1.0) {
+         damp = 1.0;
+      }
+      return damp;
+   }
+
    private static double gearMax(int g) {
       int i = g < 1 ? 1 : (g > MAX_GEAR ? MAX_GEAR : g);
       return GEAR_MAX[i];
@@ -612,8 +636,8 @@ public final class BoatHudSound {
       }
    }
 
-   private static void updateBrakeSound(Minecraft mc, boolean braking, double spd) {
-      boolean want = braking && spd > BRAKE_SOUND_MIN && !driftActive;
+   private static void updateBrakeSound(Minecraft mc, AbstractBoat boat, boolean braking, double spd) {
+      boolean want = braking && !isReversing(boat) && spd > BRAKE_SOUND_MIN && !driftActive;
       if (want) {
          brakeActive = true;
          brakeIntensity = (float)Math.min(1.0, (spd - BRAKE_SOUND_MIN) / 18.0);
@@ -666,75 +690,46 @@ public final class BoatHudSound {
    private static void updateDrift(Minecraft mc, AbstractBoat boat) {
       Vec3 v = boat.getDeltaMovement();
       double hSpeed = Math.sqrt(v.x * v.x + v.z * v.z);
-      // 只要实际在向后移动（倒车 / 挂 R 档），就不算漂移
-      double dr = Math.toRadians(boat.getYRot());
-      double rfx = -Math.sin(dr);
-      double rfz = Math.cos(dr);
-      boolean reversing = (v.x * rfx + v.z * rfz) < -0.02;
-      double angleDiff = 0.0;
-      double signedAngle = 0.0;
+
+      // 只有真正挂倒档才算倒车（侧滑超过 90° 时速度方向也朝后，不能据此判断）
+      boolean reversing = isReversing(boat);
+
+      double angle = 0.0;
       if (hSpeed > DRIFT_MIN_SPEED) {
          double heading = Math.toDegrees(Math.atan2(v.z, v.x)) - 90.0;
-         signedAngle = Mth.wrapDegrees((float)(boat.getYRot() - heading));
-         angleDiff = Math.abs(signedAngle);
-      }
-      double decel = prevSpeed - hSpeed;
-      boolean hardBrake = decel > 0.12 && prevSpeed > 0.50;
-      prevSpeed = hSpeed;
-
-      if (reversing) {
-         angleDiff = 0.0;
-         hardBrake = false;
+         angle = Math.abs(Mth.wrapDegrees((float)(boat.getYRot() - heading)));
       }
 
-      // 进入用 45°，维持用 32°，并给 0.5 秒宽限，避免抖动导致闪断
-      boolean driftEnter = angleDiff > DRIFT_MIN_ANGLE || hardBrake;
-      boolean driftHold = angleDiff > DRIFT_HOLD_ANGLE || hardBrake;
-      if (driftActive) {
-         if (driftHold) {
-            driftGrace = 0;
-         } else if (++driftGrace > DRIFT_GRACE_TICKS) {
-            driftEnter = false;
-         } else {
-            driftEnter = true;
-         }
-      } else {
-         driftGrace = 0;
-      }
+      boolean drifting = !reversing && angle > DRIFT_MIN_ANGLE && hSpeed > DRIFT_MIN_SPEED;
 
-      if (driftEnter) {
+      if (drifting) {
          driftActive = true;
-         driftIntensity = (float)Math.min(1.0, Math.max((angleDiff - DRIFT_MIN_ANGLE) / 45.0, hardBrake ? 0.55 : 0.0));
-         int dir = angleDiff > DRIFT_MIN_ANGLE ? (signedAngle > 0.0 ? 1 : -1) : driftDir;
-         if (driftTicks == 0 || (dir != driftDir && driftDir != 0)) {
-            driftAnchorX = boat.getX();
-            driftAnchorZ = boat.getZ();
-            driftTicks = 0;
-            burnoutTicks = 0;
-         }
-         driftDir = dir;
+         driftIntensity = (float)Math.min(1.0, angle / 90.0);
          driftTicks++;
 
+         // 烧胎：角度 > 60°，且始终在当前原点 ±6 格范围内，连续满 1 秒
          double adx = Math.abs(boat.getX() - driftAnchorX);
          double adz = Math.abs(boat.getZ() - driftAnchorZ);
          boolean inArea = adx <= BURNOUT_HALF && adz <= BURNOUT_HALF;
-         boolean hot = inArea && angleDiff > BURNOUT_MIN_ANGLE;
-         burnoutTicks = hot ? burnoutTicks + 1 : 0;
-         boolean burnout = burnoutTicks >= BURNOUT_TICKS;
-
-         if ((smokeTick % 2) == 0) {
-            spawnTireSmoke(mc, boat);
+         if (angle > BURNOUT_MIN_ANGLE && inArea) {
+            burnoutTicks++;
+         } else {
+            burnoutTicks = 0;
          }
-         if (burnout || driftTicks >= WHITE_SMOKE_AFTER_TICKS) {
-            if (burnout || (smokeTick % 2) == 1) {
-               spawnWhiteSmoke(mc, boat);
-            }
-         }
-         smokeTick++;
+         // 原点每满 1 秒滚到当前位置（车在原地打转才算烧胎）
          if (driftTicks % BURNOUT_TICKS == 0) {
             driftAnchorX = boat.getX();
             driftAnchorZ = boat.getZ();
          }
+
+         if ((smokeTick % 2) == 0) {
+            spawnTireSmoke(mc, boat);
+         }
+         if (burnoutTicks >= BURNOUT_TICKS) {
+            spawnWhiteSmoke(mc, boat);
+         }
+         smokeTick++;
+
          if (drift == null || !mc.getSoundManager().isActive(drift)) {
             drift = new DriftSoundInstance(mc.player);
             mc.getSoundManager().play(drift);
@@ -742,15 +737,28 @@ public final class BoatHudSound {
       } else {
          driftActive = false;
          driftIntensity = 0.0F;
-         smokeTick = 0;
          driftTicks = 0;
          burnoutTicks = 0;
-         driftDir = 0;
+         smokeTick = 0;
+         driftAnchorX = boat.getX();
+         driftAnchorZ = boat.getZ();
          if (drift != null) {
             drift.kill();
             drift = null;
          }
       }
+
+      // 急刹冒烟：速度骤降时也出胎烟（不进入漂移计时）
+      double decel = prevSpd - hSpeed;
+      if (!drifting && !reversing && decel > BRAKE_SMOKE_DECEL && prevSpd > 0.45) {
+         if ((brakeSmokeTick % 2) == 0) {
+            spawnTireSmoke(mc, boat);
+         }
+         brakeSmokeTick++;
+      } else {
+         brakeSmokeTick = 0;
+      }
+      prevSpd = hSpeed;
    }
 
    private static void spawnTireSmoke(Minecraft mc, AbstractBoat boat) {
@@ -797,17 +805,55 @@ public final class BoatHudSound {
     * 手动挡刹车时是否要屏蔽「后退」输入。
     * 手动挡下 S 一律只刹车；倒车必须挂 R 档并按油门键。
     */
+   /**
+    * 是否处于"倒车"状态（倒车不算漂移）。
+    * 规则：挂 R 档 / 自动挡向后 / 手动空挡向后，其余一律不算。
+    */
+   public static boolean isReversing(AbstractBoat boat) {
+      BoatEngineConfig cfg = Common.cfg();
+      boolean custom = cfg.drive_input == jewtvet.hud.ConfigEnums.drive_input.Custom;
+      Minecraft mc = Minecraft.getInstance();
+      boolean backKey = custom
+         ? GearKeys.BRAKE.isDown()
+         : (mc.player != null && mc.options.keyDown.isDown() && !mc.options.keyUp.isDown());
+
+      // 必须真的按着后退键 + 实际向后移动，才算倒车
+      if (!backKey) {
+         return gear == -1;          // 挂 R 档且松手时仍算倒车状态
+      }
+
+      Vec3 v = boat.getDeltaMovement();
+      double hrad = Math.toRadians(boat.getYRot());
+      double along = v.x * (-Math.sin(hrad)) + v.z * Math.cos(hrad);
+      boolean backward = along < -0.02;
+
+      if (gear == -1) {
+         return true;
+      }
+      if (cfg.gearbox == jewtvet.hud.ConfigEnums.gearbox.Auto) {
+         return backward;
+      }
+      return gear == 0 && backward;
+   }
+
    public static boolean shouldSuppressReverse() {
+      // 只有「手动挡 + R 档」才屏蔽后退：
+      // 手动挡的倒车由油门键驱动，S 只当刹车。
+      // 自动挡的倒车就是原版向后划桨，不能屏蔽。
+      if (gear != -1) {
+         return false;
+      }
       BoatEngineConfig cfg = Common.cfg();
       if (cfg.gearbox != jewtvet.hud.ConfigEnums.gearbox.Manual) {
          return false;
       }
-      boolean customDrive = cfg.drive_input == jewtvet.hud.ConfigEnums.drive_input.Custom;
-      if (customDrive) {
+      boolean custom = cfg.drive_input == jewtvet.hud.ConfigEnums.drive_input.Custom;
+      if (custom) {
          return GearKeys.BRAKE.isDown() && !GearKeys.THROTTLE.isDown();
       }
       Minecraft mc = Minecraft.getInstance();
-      return mc.options.keyDown.isDown() && !mc.options.keyUp.isDown();
+      return mc.player != null
+         && mc.options.keyDown.isDown() && !mc.options.keyUp.isDown();
    }
 
    public static boolean shouldMuteVanillaBoatSound(Object identifier) {
@@ -829,9 +875,7 @@ public final class BoatHudSound {
       brakeIntensity = 0.0F;
       driftTicks = 0;
       burnoutTicks = 0;
-      driftDir = 0;
       smokeTick = 0;
-      prevSpeed = 0.0;
       prevV = 0.0;
       neutralCap = 0.0;
       landSpeed = 0.0;
