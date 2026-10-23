@@ -94,7 +94,8 @@ public final class SettingsScreen {
       sound.addEntry(intSlider(eb, "\u79bb\u5408\uff08Clutch %\uff09", snd.volume_clutch, 0, 200, v -> snd.volume_clutch = v, 100));
       sound.addEntry(intSlider(eb, "\u6302\u6321\uff08Gear shift %\uff09", snd.volume_gear, 0, 200, v -> snd.volume_gear = v, 100));
       sound.addEntry(intSlider(eb, "\u6f02\u79fb\u80ce\u53eb\uff08Drift %\uff09", snd.volume_drift, 0, 200, v -> snd.volume_drift = v, 100));
-      sound.addEntry(intSlider(eb, "\u5f15\u64ce / \u7535\u673a\u97f3\u9ad8\uff08Pitch %\uff09", snd.pitch_engine, 50, 150, v -> snd.pitch_engine = v, 100));
+      sound.addEntry(intSlider(eb, "引擎 / 电机音高（Pitch %）", snd.pitch_engine, 50, 150, v -> snd.pitch_engine = v, 100));
+      sound.addEntry(intSlider(eb, "刹车力度（Brake：50 = 原版 / 100 = 默认 / 150 = 最强）", snd.brake_strength, 50, 150, v -> snd.brake_strength = v, 100));
       sound.addEntry(eb.startBooleanToggle(
             Component.literal("\u5c4f\u853d\u539f\u7248\u5212\u6c34\u58f0\uff08Mute vanilla boat sounds\uff09"),
             snd.mute_vanilla_boat)
