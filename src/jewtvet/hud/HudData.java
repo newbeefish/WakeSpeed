@@ -90,11 +90,10 @@ public class HudData {
          double crossY = fz * hx - fx * hz;
          this.driftAngle = angle * (crossY >= 0.0 ? -1 : 1);
 
-         // 只要实际在向后移动（倒车 / 挂 R 档 / 被撞），就不算漂移
-         // 否则速度与船头相反会让夹角接近 180°，误触发漂移计时
-         if (dot < 0.0) {
-            this.driftAngle = 0.0;
-         }
+               // 只有挂倒档才算倒车（大角度侧滑时速度也会朝后）
+      if (jewtvet.boathud.BoatHudSound.isReversing(boat)) {
+         this.driftAngle = 0.0;
+      }
          if (Double.isNaN(this.driftAngle)) {
             this.driftAngle = 0.0;
          }
