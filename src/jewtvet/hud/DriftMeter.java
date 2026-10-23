@@ -5,18 +5,10 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.joml.Matrix3x2fStack;
 
 /**
- * 漂移 / 烧胎 双计时（仿 Forza Horizon）。
+ * 漂移 / 烧胎计时（极简版）。
  *
- * 漂移：|侧滑角| > 45°，速度 > 4 格/秒。
- * 烧胎：在漂移基础上额外要求
- *   - |侧滑角| > 60°
- *   - 持续同向（转向方向不能翻转）
- *   - 在**当前原点**的 12x12 范围内（±6 格），原点每满 1 秒滚到当前位置
- *   - 满足上述条件连续满 1 秒
- *
- * 两个计时**独立**：
- *   driftTicks   —— 只要在漂移就一直涨（方向翻转/停止才清零）
- *   burnoutTicks —— 只在烧胎条件成立时涨，条件一断立刻清零
+ * 漂移：|侧滑角| > 45° 且 速度 > 4 格/秒
+ * 烧胎：漂移中 |侧滑角| > 60° 连续满 1 秒
  */
 public final class DriftMeter {
    public static boolean drifting = false;
@@ -26,19 +18,9 @@ public final class DriftMeter {
    public static int direction = 0;
 
    private static final double MIN_ANGLE = 45.0;
-   /** 退出滞回角：低于这个角度且持续 GRACE_TICKS 才判定结束 */
-   private static final double HOLD_ANGLE = 32.0;
-   private static final double HOLD_SPEED = 3.0;
-   private static final int GRACE_TICKS = 10;
-   private static final double BURNOUT_MIN_ANGLE = 60.0;
-   private static final double MIN_SPEED = 4.0;
-   private static final double AREA_HALF = 6.0;          // 12x12 -> 半边长 6
-   private static final int BURNOUT_TICKS = 20;          // 1 秒
-   private static final int ANCHOR_RESET_TICKS = 20;     // 每 1 秒滚动原点
-
-   private static double anchorX = 0.0;
-   private static double anchorZ = 0.0;
-   private static int graceTicks = 0;
+   private static final double BURNOUT_ANGLE = 60.0;
+   private static final double MIN_SPEED = 2.0;
+   private static final int BURNOUT_TICKS = 20;
 
    private DriftMeter() {
    }
@@ -53,59 +35,22 @@ public final class DriftMeter {
 
    public static void tick(double x, double z, double speed, double driftAngle) {
       double ang = Math.abs(driftAngle);
-      boolean enter = ang > MIN_ANGLE && speed > MIN_SPEED;
-      boolean hold = ang > HOLD_ANGLE && speed > HOLD_SPEED;
 
-      if (!drifting) {
-         if (!enter) {
-            reset();
-            return;
-         }
-      } else {
-         // 已经处于漂移：角度短暂掉到阈值以下也先不结束（宽限 0.5 秒）
-         if (hold) {
-            graceTicks = 0;
-         } else {
-            graceTicks++;
-            if (graceTicks > GRACE_TICKS) {
-               reset();
-               return;
-            }
-         }
+      if (ang <= MIN_ANGLE || speed <= MIN_SPEED) {
+         reset();
+         return;
       }
 
-      int dir = driftAngle > 0.0 ? 1 : -1;
-
-      // 只有当角度明显反向时才重新开始，避免在 0° 附近来回抖
-      if (!drifting || (dir != direction && ang > MIN_ANGLE)) {
-         drifting = true;
-         driftTicks = 0;
-         burnoutTicks = 0;
-         burnout = false;
-         anchorX = x;
-         anchorZ = z;
-         direction = dir;
-         graceTicks = 0;
-      }
-
+      drifting = true;
       driftTicks++;
+      direction = driftAngle > 0.0 ? 1 : -1;
 
-      double dx = Math.abs(x - anchorX);
-      double dz = Math.abs(z - anchorZ);
-      boolean inArea = dx <= AREA_HALF && dz <= AREA_HALF;
-      boolean hot = inArea && ang > BURNOUT_MIN_ANGLE;
-
-      if (hot) {
+      if (ang > BURNOUT_ANGLE) {
          burnoutTicks++;
       } else {
          burnoutTicks = 0;
       }
       burnout = burnoutTicks >= BURNOUT_TICKS;
-
-      if (driftTicks % ANCHOR_RESET_TICKS == 0) {
-         anchorX = x;
-         anchorZ = z;
-      }
    }
 
    public static float driftSeconds() {
@@ -124,7 +69,7 @@ public final class DriftMeter {
       int baseY = g.guiHeight() - 50;
 
       String driftTime = String.format("%.2f", driftSeconds());
-      String label = burnout ? "\u70e7\u80ce BURNOUT" : "DRIFT";
+      String label = burnout ? "烧胎 BURNOUT" : "DRIFT";
       int labelColor = burnout ? 0xFFFF7A1A : 0xFF7FD4FF;
       int timeColor = burnout ? 0xFFFFB347 : 0xFFFFFFFF;
 
@@ -133,7 +78,6 @@ public final class DriftMeter {
       int lw = mc.font.width(label);
       g.text(mc.font, label, cx - lw / 2, baseY - 12, labelColor, true);
 
-      // 漂移总时长（大号）
       m.pushMatrix();
       m.translate((float)cx, (float)(baseY + 2));
       m.scale(2.0F, 2.0F);
@@ -141,23 +85,20 @@ public final class DriftMeter {
       g.text(mc.font, driftTime, -tw / 2, 0, timeColor, true);
       m.popMatrix();
 
-      // 烧胎独立计时（条件成立时才显示）
       if (burnoutTicks > 0) {
-         String bt = "\u70e7\u80ce " + String.format("%.2f", burnoutSeconds());
+         String bt = "烧胎 " + String.format("%.2f", burnoutSeconds());
          int bw = mc.font.width(bt);
          g.text(mc.font, bt, cx - bw / 2, baseY + 15, burnout ? 0xFFFF7A1A : 0xFFFFC08A, true);
       }
 
-      // 进度条：烧胎计时优先，否则显示漂移到 1 秒的进度
       float frac = burnoutTicks > 0
-         ? Math.min(1.0F, burnoutSeconds() / 1.0F)
-         : Math.min(1.0F, driftSeconds() / 1.0F);
+         ? Math.min(1.0F, burnoutSeconds())
+         : Math.min(1.0F, driftSeconds());
       int barW = 60;
       int barX = cx - barW / 2;
       int barY = baseY + 26;
       g.fill(barX - 1, barY - 1, barX + barW + 1, barY + 3, 0x90000000);
-      int fillW = (int)(barW * frac);
-      int barColor = burnoutTicks > 0 ? 0xFFFF7A1A : 0xFF7FD4FF;
-      g.fill(barX, barY, barX + fillW, barY + 2, barColor);
+      g.fill(barX, barY, barX + (int)(barW * frac), barY + 2,
+         burnoutTicks > 0 ? 0xFFFF7A1A : 0xFF7FD4FF);
    }
 }
