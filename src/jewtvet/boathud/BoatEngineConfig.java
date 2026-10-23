@@ -37,11 +37,18 @@ public class BoatEngineConfig implements ConfigData {
 
    @BoundedDiscrete(min = 50L, max = 150L) public int pitch_engine = 100;
 
+   /** 刹车力度（50~150，100 = 原版居中） */
+   @BoundedDiscrete(min = 50L, max = 150L) public int brake_strength = 100;
+
    public float engineGain()  { return volume_engine / 100.0F; }
    public float turboGain()   { return volume_turbo / 100.0F; }
    public float blowoffGain() { return volume_blowoff / 100.0F; }
    public float clutchGain()  { return volume_clutch / 100.0F; }
    public float gearGain()    { return volume_gear / 100.0F; }
+   /** 刹车系数：50 = 原版(0)，100 = 默认(1)，150 = 双倍(2) */
+   public float brakeFactor() {
+      return (brake_strength - 50) / 50.0F;
+   }
    public float driftGain()   { return volume_drift / 100.0F; }
    public float enginePitch() { return pitch_engine / 100.0F; }
 }
